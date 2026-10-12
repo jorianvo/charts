@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="refresh" content="3" />
+  <title>{{if .Central}}Central bridge{{else}}{{display .Name}} bridge{{end}}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=JetBrains+Mono:wght@400;500&display=swap" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header>
+    <div>
+      {{if .Central}}
+      <p class="eyebrow"><span class="rule">/</span><span class="demo">Demo</span>Bridge · cloud · links every hospital</p>
+      <h1>Central bridge</h1>
+      {{else}}
+      <p class="eyebrow"><span class="rule">/</span><span class="demo">Demo</span>Bridge · cloud · connects {{display .Name}} to the network</p>
+      <h1>{{display .Name}} bridge</h1>
+      {{end}}
+    </div>
+    <div class="chips">
+      {{if .Central}}
+      <span class="chip"><span class="label">Hospitals</span>{{len .Communities}}</span>
+      {{else}}
+      <span class="chip"><span class="label">Documents</span>{{.Documents}}</span>
+      <span class="chip"><span class="label">Patients</span>{{.Patients}}</span>
+      <span class="chip" title="{{.CentralErr}}"><span class="dot{{if not .Registered}} down{{end}}"></span><span class="label">Central bridge</span>{{if .Registered}}connected{{else}}unreachable{{end}}</span>
+      {{end}}
+    </div>
+  </header>
+
+  <main>
+    {{if .Central}}
+    <section class="wide">
+      <h2>Hospitals in the network</h2>
+      <p class="sub">Each hospital's bridge registers here. Questions from one hospital are passed on to all the others.</p>
+      <table>
+        <tr><th>Hospital</th><th>Bridge address (in the cluster)</th><th>Last seen</th></tr>
+        {{range .Communities}}
+        <tr>
+          <td><span class="row"><span class="dot{{if not .Active}} down{{end}}"></span><span class="title">{{display .Name}}</span></span></td>
+          <td class="mono">{{.URL}}</td>
+          <td class="when">{{ago .LastSeen}}</td>
+        </tr>
+        {{else}}
+        <tr><td colspan="3" class="empty">No hospital bridges have registered yet.</td></tr>
+        {{end}}
+      </table>
+    </section>
+    {{end}}
+
+    <section class="wide">
+      <h2>What happened</h2>
+      <table>
+        <tr><th>Time</th><th>Step</th><th>Detail</th></tr>
+        {{range .Events}}
+        <tr title="{{.Transaction.Explain}}">
+          <td class="when">{{.Time.Format "15:04:05"}}</td>
+          <td class="step"><span class="{{if .OK}}ok{{else}}err{{end}}">{{.Transaction.Name}}</span>{{with .Transaction.Code}} <span class="code">{{.}}</span>{{end}}</td>
+          <td>{{.Detail}}</td>
+        </tr>
+        {{else}}
+        <tr><td colspan="3" class="empty">Nothing yet.</td></tr>
+        {{end}}
+      </table>
+    </section>
+
+    <section class="wide">
+      <h2>The steps, and their IHE names</h2>
+      <p class="sub">The bridges follow IHE XCA: the standard for sharing medical documents between organisations. Each step is a numbered IHE transaction.</p>
+      <table>
+        {{range .Transactions}}
+        <tr>
+          <td class="step">{{.Name}}</td>
+          <td class="when">{{with .Code}}{{.}} {{end}}{{.IHEName}}</td>
+          <td>{{.Explain}}</td>
+        </tr>
+        {{end}}
+      </table>
+    </section>
+  </main>
+  <footer class="disclaimer">Demo built for TalosCon 2026. Simplified on purpose (synthetic patients, data kept in memory, no authentication) and not representative of production software.</footer>
+</body>
+</html>
