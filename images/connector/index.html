@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{.HospitalDisplay}} · connector</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=JetBrains+Mono:wght@400;500&display=swap" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header>
+    <div>
+      <p class="eyebrow"><span class="rule">/</span><span class="demo">Demo</span>Connector · on-premises</p>
+      <h1>{{.HospitalDisplay}}</h1>
+    </div>
+    <div class="chips">
+      <span class="chip"><span class="label">EMR</span>{{.EMR}}</span>
+      <span class="chip" id="bridge"><span class="dot down" id="bridge-dot"></span><span class="label">Bridge</span>{{.BridgeEndpoint}}</span>
+    </div>
+  </header>
+
+  <main>
+    <section>
+      <h2>Messages from {{.EMR}}</h2>
+      <p class="sub">The EMR sends each new result as an HL7 v2 message (ORU^R01). The connector stores it as a document and registers it with its bridge.</p>
+      <button id="simulate">Receive message from EMR</button>
+      <ul class="list" id="feed"></ul>
+    </section>
+
+    <section>
+      <h2>Patient record</h2>
+      <p class="sub">Pick a patient to see their documents from every hospital in the network, not just this one.</p>
+      <div class="chips" id="patients"></div>
+      <ul class="list" id="documents"></ul>
+      <div id="document"></div>
+    </section>
+
+    <section class="wide">
+      <h2>How it works</h2>
+      <ol class="flow">
+        <li><span class="title">The EMR sends a result.</span> An HL7 v2 message arrives at the connector, inside the hospital.</li>
+        <li><span class="title">Register document</span> <span class="code">ITI-42</span> The connector tells its bridge in the cloud that the document exists, over Tailscale.</li>
+        <li><span class="title">Find documents</span> <span class="code">ITI-18</span> A clinician picks a patient; the connector asks its bridge what exists for that patient.</li>
+        <li><span class="title">Ask other hospitals</span> <span class="code">ITI-38</span> The bridge asks the bridges of the other hospitals, through the central bridge.</li>
+        <li><span class="title">Fetch from other hospital</span> <span class="code">ITI-39</span> Opening another hospital's document fetches it the same way. Own documents come straight from the bridge <span class="code">ITI-43</span>.</li>
+      </ol>
+    </section>
+  </main>
+  <footer class="disclaimer">Demo built for TalosCon 2026. Simplified on purpose (synthetic patients, data kept in memory, no authentication) and not representative of production software.</footer>
+
+  <script>
+    const hospital = {{.Hospital}};
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const time = (t) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    const display = (n) => n.split(/[-_ ]+/).map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
+    let patientsRendered = false;
+    let selected = null;
+
+    async function refresh() {
+      try {
+        const s = await (await fetch("/api/state", { cache: "no-store" })).json();
+        $("bridge-dot").className = s.bridge.ok ? "dot" : "dot down";
+        $("bridge").title = s.bridge.ok ? "Bridge reachable over Tailscale" : s.bridge.error;
+        const feed = s.feed || [];
+        $("feed").innerHTML = feed.length ? feed.map((m) => `
+          <li>
+            <div class="row"><span class="title">${esc(m.title)}</span><span>${esc(m.patientName)}</span><span class="meta mono">PID ${esc(m.patientId)}</span></div>
+            <div class="row meta"><span class="mono">${time(m.time)}</span><span class="mono">${esc(m.type)}</span><span class="${m.ok ? "ok" : "err"}">${esc(m.status)}</span>${m.ok ? `<span class="code">ITI-42</span>` : ""}</div>
+            <details><summary>HL7 message</summary><pre>${esc(m.raw)}</pre></details>
+          </li>`).join("") : `<li class="empty">No messages yet.</li>`;
+        if (!patientsRendered) {
+          $("patients").innerHTML = s.patients.map((p) =>
+            `<button class="ghost" data-id="${esc(p.ID)}">${esc(p.Given)} ${esc(p.Family)}</button>`).join("");
+          $("patients").querySelectorAll("button").forEach((b) => b.onclick = () => query(b.dataset.id));
+          patientsRendered = true;
+        }
+      } catch (e) { /* keep the last state on screen */ }
+    }
+
+    async function query(id) {
+      selected = id;
+      history.replaceState(null, "", "#patient=" + encodeURIComponent(id));
+      $("patients").querySelectorAll("button").forEach((b) => b.classList.toggle("active", b.dataset.id === id));
+      $("document").innerHTML = "";
+      $("documents").innerHTML = `<li class="empty">Asking every hospital in the network…</li>`;
+      const r = await fetch(`/api/patients/${encodeURIComponent(id)}/documents`, { cache: "no-store" });
+      const res = await r.json();
+      if (!r.ok) { $("documents").innerHTML = `<li class="err">${esc(res.error)}</li>`; return; }
+      const docs = (res.documents || []).sort((a, b) => new Date(b.created) - new Date(a.created));
+      const errors = (res.errors || []).map((e) => `<li class="err">${esc(e)}</li>`).join("");
+      $("documents").innerHTML = (docs.length ? docs.map((d) => {
+        const local = d.community === hospital;
+        return `<li>
+          <div class="row"><span class="title">${esc(d.title)}</span>
+            <span class="${local ? "ok" : "remote"}">${local ? "this hospital" : "from " + esc(display(d.community))}</span>
+            <span class="code">${local ? "ITI-18" : "ITI-38"}</span></div>
+          <div class="row meta"><span class="mono">${time(d.created)}</span><span>${esc(d.source)}</span>
+            <button class="ghost" data-c="${esc(d.community)}" data-id="${esc(d.id)}">Open</button></div>
+        </li>`;
+      }).join("") : `<li class="empty">No documents for this patient in the network.</li>`) + errors;
+      $("documents").querySelectorAll("button").forEach((b) => b.onclick = () => open(b.dataset.c, b.dataset.id));
+    }
+
+    async function open(community, id) {
+      $("document").innerHTML = `<p class="empty">Fetching…</p>`;
+      const r = await fetch(`/api/documents/${encodeURIComponent(community)}/${encodeURIComponent(id)}`, { cache: "no-store" });
+      const d = await r.json();
+      if (!r.ok) { $("document").innerHTML = `<p class="err">${esc(d.error)}</p>`; return; }
+      const local = d.community === hospital;
+      $("document").innerHTML = `<p class="meta">${local ? "Opened from this hospital's bridge" : "Fetched from " + esc(display(d.community)) + " through the central bridge"} <span class="code">${local ? "ITI-43" : "ITI-39"}</span></p>
+        <pre class="doc-content"><strong>${esc(d.title)}</strong> · ${esc(d.patientName)} · ${esc(display(d.community))} (${esc(d.source)})\n\n${esc(d.content)}</pre>`;
+    }
+
+    $("simulate").onclick = async () => {
+      $("simulate").disabled = true;
+      try { await fetch("/api/emr/simulate", { method: "POST" }); } finally { $("simulate").disabled = false; }
+      await refresh();
+      if (selected) query(selected);
+    };
+
+    refresh().then(() => {
+      const m = location.hash.match(/patient=([^&]+)/);
+      if (m) query(decodeURIComponent(m[1]));
+    });
+    setInterval(refresh, 3000);
+  </script>
+</body>
+</html>
