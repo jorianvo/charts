@@ -1,0 +1,21 @@
+{{- if .Values.ingress.enabled -}}
+{{- $hostname := printf "%s-bridge.%s" (required "hospitalName is required" .Values.hospitalName) (required "tailnetDomain is required" .Values.tailnetDomain) }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "bridge.fullname" . }}
+  labels:
+    {{- include "bridge.labels" . | nindent 4 }}
+  annotations:
+    tailscale.com/tags: {{ printf "tag:%s-bridge" .Values.hospitalName | quote }}
+spec:
+  ingressClassName: tailscale
+  defaultBackend:
+    service:
+      name: {{ include "bridge.fullname" . }}
+      port:
+        name: http
+  tls:
+    - hosts:
+        - {{ $hostname | quote }}
+{{- end }}

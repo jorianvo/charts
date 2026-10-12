@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "bridge.fullname" . }}
+  labels:
+    {{- include "bridge.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "bridge.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "bridge.selectorLabels" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: bridge
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.Version }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: HOSPITAL_NAME
+              value: {{ required "hospitalName is required" .Values.hospitalName | quote }}
+            - name: MODE
+              value: {{ .Values.mode | quote }}
+            - name: CENTRAL_URL
+              value: {{ .Values.centralBridge | quote }}
+            - name: SELF_URL
+              value: "http://{{ include "bridge.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local"
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
