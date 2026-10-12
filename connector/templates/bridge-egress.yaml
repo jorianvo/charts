@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "connector.fullname" . }}-bridge
+  labels:
+    {{- include "connector.labels" . | nindent 4 }}
+  annotations:
+    tailscale.com/tailnet-fqdn: {{ include "connector.bridgeEndpoint" . | quote }}
+    tailscale.com/tags: {{ printf "tag:%s" .Values.hospitalName | quote }}
+spec:
+  type: ExternalName
+  externalName: placeholder
+  ports:
+    - name: https
+      port: 443
+      protocol: TCP
