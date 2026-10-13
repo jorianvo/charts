@@ -56,6 +56,7 @@ type server struct {
 	centralURL string   // gateway mode: the central bridge
 	selfURL    string   // gateway mode: how the central bridge reaches this bridge
 	hospitals  []string // central mode: the hospitals to draw, connected or not
+	onboard    string   // central mode: the hospital the page walks through onboarding
 	tmpl       *template.Template
 	log        xds.Log
 
@@ -64,6 +65,7 @@ type server struct {
 	connector     *xds.Connector          // gateway mode: this hospital's connector
 	connectorSeen time.Time
 	communities   map[string]*community // central mode: the directory
+	step          int                   // central mode: onboarding steps the presenter has clicked
 	registered    bool
 	centralErr    string
 }
@@ -86,6 +88,7 @@ func main() {
 		centralURL:  strings.TrimRight(xds.Env("CENTRAL_URL", "http://bridge-central"), "/"),
 		selfURL:     strings.TrimRight(xds.Env("SELF_URL", "http://localhost:"+port), "/"),
 		hospitals:   strings.FieldsFunc(xds.Env("HOSPITALS", ""), func(r rune) bool { return r == ',' || r == ' ' }),
+		onboard:     xds.Env("ONBOARD", ""),
 		tmpl:        template.Must(template.New("index").Parse(page)),
 		docs:        map[string]xds.Document{},
 		communities: map[string]*community{},
@@ -98,6 +101,7 @@ func main() {
 
 	if s.central {
 		mux.HandleFunc("GET /api/topology", s.topology)
+		mux.HandleFunc("POST /api/step", s.setStep)
 		mux.HandleFunc("POST /directory/register", s.registerCommunity)
 		mux.HandleFunc("POST /xca/query", s.routeQuery)
 		mux.HandleFunc("POST /xca/retrieve", s.routeRetrieve)
@@ -389,6 +393,7 @@ func (s *server) index(w http.ResponseWriter, _ *http.Request) {
 	}
 	data := map[string]any{
 		"Display":      s.display,
+		"Onboard":      s.onboard,
 		"Registered":   s.registered,
 		"CentralErr":   s.centralErr,
 		"Connector":    s.connectedConnector(),
@@ -406,9 +411,18 @@ func (s *server) index(w http.ResponseWriter, _ *http.Request) {
 // site is a hospital as the central page draws it: its on-prem Talos cluster
 // with the connector, and its bridge in the cloud. Bridge and Connector are nil
 // while they are not deployed or not reachable.
+//
+// Cluster, VPN and Argo are the onboarding steps before anything is deployed:
+// a Talos cluster runs in the hospital, its site-to-site VPN is up and the
+// cluster is registered with Argo CD. They are always done for a hospital that
+// is not being onboarded; for the one that is, the presenter clicks through
+// them. A connector reaching its bridge proves all three.
 type site struct {
 	Name      string         `json:"name"`
 	Display   string         `json:"display"`
+	Cluster   bool           `json:"cluster"`
+	VPN       bool           `json:"vpn"`
+	Argo      bool           `json:"argo"`
 	Bridge    *bridgeView    `json:"bridge"`
 	Connector *xds.Connector `json:"connector"`
 }
@@ -439,6 +453,14 @@ func (s *server) sites() []site {
 			h.Bridge = &bridgeView{Display: c.Display}
 			h.Connector = c.Connector
 		}
+		connected := h.Connector != nil
+		if name == s.onboard {
+			h.Cluster = s.step >= 1 || connected
+			h.VPN = s.step >= 2 || connected
+			h.Argo = s.step >= 3 || connected
+		} else {
+			h.Cluster, h.VPN, h.Argo = true, connected, true
+		}
 		out = append(out, h)
 	}
 	return out
@@ -446,9 +468,31 @@ func (s *server) sites() []site {
 
 // topology feeds the central page: every hospital and what runs where.
 func (s *server) topology(w http.ResponseWriter, _ *http.Request) {
+	sites := s.sites()
+	s.mu.Lock()
+	step := s.step
+	s.mu.Unlock()
 	xds.WriteJSON(w, http.StatusOK, map[string]any{
-		"hospitals": s.sites(),
+		"hospitals": sites,
+		"onboard":   s.onboard,
+		"step":      step,
 	})
+}
+
+// setStep records how far the presenter clicked through onboarding: 0 to 3.
+// The fourth step, pushing a folder, is done once Argo CD deploys it.
+func (s *server) setStep(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Step int `json:"step"`
+	}
+	if err := decode(r, &req); err != nil || req.Step < 0 || req.Step > 3 {
+		xds.WriteError(w, http.StatusBadRequest, errors.New("step must be 0 to 3"))
+		return
+	}
+	s.mu.Lock()
+	s.step = req.Step
+	s.mu.Unlock()
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func decode(r *http.Request, v any) error {

@@ -16,7 +16,11 @@
       --slate: #67829b;
       --cloud-bg: #dfe9f20d;
     }
-    #network { grid-column: 1 / -1; display: block; width: 100%; height: auto; padding: 16px 0; font-family: var(--font-sans); }
+    body { display: flex; flex-direction: column; }
+    main { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 48px; padding: 32px 48px; }
+    footer.disclaimer { padding: 0 48px 24px; text-align: center; }
+
+    #network { display: block; width: 100%; height: auto; font-family: var(--font-sans); }
     #network .box { fill: var(--panel); stroke: var(--slate); stroke-width: 1.5; }
     #network .cloud { fill: var(--cloud-bg); stroke: var(--slate); stroke-width: 1.5; }
     #network .talos { fill: none; stroke: var(--slate); stroke-width: 1.5; stroke-dasharray: 6 5; }
@@ -35,22 +39,45 @@
     #network .up { fill: var(--founda); }
     #network .down { fill: var(--fg-dim); }
     #network .enter { animation: enter .8s ease-out; transform-box: fill-box; transform-origin: center; }
+
+    /* The onboarding steps, laid out like the deck's 4-step slide. */
+    ol.steps { display: flex; align-items: flex-start; gap: 12px; margin: 0; padding: 0; list-style: none; }
+    ol.steps > li { flex: 1; min-width: 0; }
+    ol.steps > li.to { flex: 0 0 auto; align-self: center; margin-bottom: 28px; color: var(--founda); font-size: 22px; }
+    .step {
+      display: flex; flex-direction: column; gap: 6px; width: 100%; height: 100%; min-height: 160px; padding: 18px 20px;
+      font: inherit; font-weight: 400; text-align: left; color: var(--fg);
+      background: var(--panel); border: 1.5px solid var(--line-2); border-radius: 12px;
+      transition: background .4s, border-color .4s;
+    }
+    button.step { cursor: pointer; }
+    button.step:hover { border-color: var(--founda); }
+    .step.done { background: var(--founda-bg); border-color: var(--founda); }
+    .step .num { font-family: var(--font-mono); font-size: 26px; color: var(--founda); line-height: 1.2; }
+    .step .title { font-size: 19px; font-weight: 700; }
+    .step .desc { font-size: 15px; color: var(--fg-dim); }
+    ol.steps .who { display: block; margin-top: 10px; text-align: center; font-family: var(--font-mono); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--slate); }
+
     @keyframes flow { to { stroke-dashoffset: -16; } }
     @keyframes enter { from { opacity: 0; transform: scale(.85); } to { opacity: 1; transform: none; } }
   </style>
 </head>
 <body>
-  <header>
-    <div>
-      <p class="eyebrow"><span class="rule">/</span><span class="demo">Demo</span>Bridge · cloud · routes requests between hospitals</p>
-      <h1>{{.Display}}</h1>
-    </div>
-  </header>
-
   <main>
     <svg id="network" role="img" aria-label="Hospitals and the cloud"></svg>
+    {{if .Onboard}}
+    <ol class="steps" aria-label="Onboarding a hospital">
+      <li><button class="step" data-step="1"><span class="num">01</span><span class="title">Boot the Talos image</span><span class="desc">The hospital starts a VM from our Talos image.</span></button><span class="who">Hospital IT</span></li>
+      <li class="to" aria-hidden="true">→</li>
+      <li><button class="step" data-step="2"><span class="num">02</span><span class="title">Open the connection</span><span class="desc">Two ports and a site-to-site VPN.</span></button><span class="who">Hospital IT</span></li>
+      <li class="to" aria-hidden="true">→</li>
+      <li><button class="step" data-step="3"><span class="num">03</span><span class="title">Join the cluster to Argo</span><span class="desc">We configure Talos and register the cluster.</span></button><span class="who">Founda infra team</span></li>
+      <li class="to" aria-hidden="true">→</li>
+      <li><div class="step" data-step="4"><span class="num">04</span><span class="title">Push a folder</span><span class="desc">Add a folder to git, and Argo deploys it.</span></div><span class="who">Integration consultant</span></li>
+    </ol>
+    {{end}}
   </main>
-  <footer class="disclaimer">Demo built for TalosCon 2026. Simplified on purpose (synthetic patients, data kept in memory, no authentication) and not representative of production software.</footer>
+  <footer class="disclaimer">Demo built for TalosCon 2026. Simplified on purpose and not representative of production software.</footer>
 
   <script>
     const $ = (id) => document.getElementById(id);
@@ -94,19 +121,27 @@
       const c = h.connector;
       let out = "";
 
-      // The hospital, its source system and its Talos cluster are always
-      // there: they are the hospital's own infrastructure.
+      // The hospital and its source system are always there.
       out += `<rect class="box" x="${hx}" y="${y}" width="${HW}" height="${RH}" rx="16" />
         <text class="h" x="${hx + 20}" y="${y + 36}">${esc(h.display)}</text>
         <text class="label" x="${hx + HW - 20}" y="${y + 34}" text-anchor="end">ON-PREM</text>
-        ${box("box", hx + 20, y + 76, HW - 40, 62, "Source system", [["s", "Medical images and reports"]])}
-        <rect class="talos" x="${hx + 12}" y="${y + 160}" width="${HW - 24}" height="${RH - 172}" rx="12" />
-        <text class="label" x="${hx + 28}" y="${y + 184}">TALOS CLUSTER</text>`;
+        ${box("box", hx + 20, y + 76, HW - 40, 62, "Source system", [["s", "Medical images and reports"]])}`;
+
+      // The Talos cluster, once the hospital booted our image (step 1), and
+      // marked once it is registered with Argo CD (step 3).
+      if (h.cluster) {
+        out += group(`${h.name}/cluster`, `
+          <rect class="talos" x="${hx + 12}" y="${y + 160}" width="${HW - 24}" height="${RH - 172}" rx="12" />
+          <text class="label" x="${hx + 28}" y="${y + 184}">TALOS CLUSTER</text>`);
+        if (h.argo) {
+          out += group(`${h.name}/argo`, `<text class="label up" x="${hx + HW - 28}" y="${y + 184}" text-anchor="end">IN ARGO CD</text>`);
+        }
+      }
       if (c) {
         out += group(`${h.name}/connector`, `
           <path class="arrow" d="M${hx + HW / 2} ${y + 138} V${y + 196}" marker-end="url(#arrow)" />
           ${box("founda", adapter.x, adapter.y, adapter.w, adapter.h, "Founda adapter", [["s", "Our software, inside the hospital"]])}`);
-      } else {
+      } else if (h.cluster) {
         out += `<text class="empty" x="${hx + HW / 2}" y="${ay + 5}" text-anchor="middle">Nothing deployed yet</text>`;
       }
 
@@ -119,15 +154,15 @@
       }
 
       // The site-to-site VPN between the hospital and the cloud: up once the
-      // connector reaches its bridge through it.
+      // hospital opened it (step 2). Traffic flows through it once the
+      // connector reaches its bridge.
       const gx = left ? HW : CX + CW; // start of the gap between hospital and cloud
       const mid = gx + GAP / 2;
-      const up = !!(c && h.bridge);
-      if (up) {
+      if (h.vpn) {
         const [x1, x2] = left ? [adapter.x + adapter.w, bridge.x] : [bridge.x + BW, adapter.x];
         out += group(`${h.name}/vpn`, `
           <rect class="vpn" x="${gx + 6}" y="${ay - 16}" width="${GAP - 12}" height="32" rx="16" />
-          <path class="flow" d="M${x1} ${ay} H${x2}" />
+          ${c && h.bridge ? `<path class="flow" d="M${x1} ${ay} H${x2}" />` : ""}
           ${lock(mid, ay - 1, true)}
           <text class="vpn-label up" x="${mid}" y="${ay - 26}" text-anchor="middle">VPN</text>
           <text class="vpn-label up" x="${mid}" y="${ay + 36}" text-anchor="middle">up</text>`);
@@ -160,6 +195,25 @@
       shown = next;
     }
 
+    // The onboarding steps. A step is done once the hospital being onboarded
+    // shows it; step 4 is done once Argo CD deployed its connector and bridge.
+    let clicked = 0;
+    function renderSteps(t) {
+      clicked = t.step || 0;
+      const h = (t.hospitals || []).find((h) => h.name === t.onboard);
+      if (!h) return;
+      const done = [h.cluster, h.vpn, h.argo, !!(h.connector && h.bridge)];
+      document.querySelectorAll(".step").forEach((el) => el.classList.toggle("done", done[el.dataset.step - 1]));
+    }
+
+    // Clicking a step marks it, and the steps before it, as done. Clicking the
+    // last done step again undoes it, to rehearse the demo.
+    document.querySelectorAll("button.step").forEach((b) => b.onclick = async () => {
+      const n = Number(b.dataset.step);
+      await fetch("/api/step", { method: "POST", body: JSON.stringify({ step: clicked === n ? n - 1 : n }) });
+      refresh();
+    });
+
     async function refresh() {
       try {
         const t = await (await fetch("/api/topology", { cache: "no-store" })).json();
@@ -170,6 +224,7 @@
           lastTopology = sig;
           render(t);
         }
+        renderSteps(t);
       } catch (e) { /* keep the last state on screen */ }
     }
 

@@ -12,6 +12,11 @@ centralBridge: "http://bridge-central"
 # deployed on it, so the overview shows which hospitals are not connected yet.
 hospitals: []
 
+# Central mode: the hospital the page walks through onboarding, e.g.
+# hospital-b. It adds the four onboarding steps under the network; clicking
+# them boots its Talos cluster, opens its VPN and registers it with Argo CD.
+onboard: ""
+
 image:
   repository: jorianvo/bridge
   tag: ""

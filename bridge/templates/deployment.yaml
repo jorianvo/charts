@@ -40,6 +40,10 @@ spec:
             - name: HOSPITALS
               value: {{ join "," . | quote }}
             {{- end }}
+            {{- with .Values.onboard }}
+            - name: ONBOARD
+              value: {{ . | quote }}
+            {{- end }}
             - name: CENTRAL_URL
               value: {{ .Values.centralBridge | quote }}
             - name: SELF_URL
