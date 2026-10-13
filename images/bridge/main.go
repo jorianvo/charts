@@ -65,7 +65,7 @@ type server struct {
 	connector     *xds.Connector          // gateway mode: this hospital's connector
 	connectorSeen time.Time
 	communities   map[string]*community // central mode: the directory
-	step          int                   // central mode: onboarding steps the presenter has clicked
+	step          int                   // central mode: onboarding steps the presenter has clicked, 0 to 2
 	registered    bool
 	centralErr    string
 }
@@ -415,8 +415,9 @@ func (s *server) index(w http.ResponseWriter, _ *http.Request) {
 // Cluster, VPN and Argo are the onboarding steps before anything is deployed:
 // a Talos cluster runs in the hospital, its site-to-site VPN is up and the
 // cluster is registered with Argo CD. They are always done for a hospital that
-// is not being onboarded; for the one that is, the presenter clicks through
-// them. A connector reaching its bridge proves all three.
+// is not being onboarded. For the one that is, the presenter clicks through the
+// first two, and the cluster counts as registered once Argo CD deployed the
+// connector on it. A connector reaching its bridge proves all three.
 type site struct {
 	Name      string         `json:"name"`
 	Display   string         `json:"display"`
@@ -457,7 +458,7 @@ func (s *server) sites() []site {
 		if name == s.onboard {
 			h.Cluster = s.step >= 1 || connected
 			h.VPN = s.step >= 2 || connected
-			h.Argo = s.step >= 3 || connected
+			h.Argo = connected
 		} else {
 			h.Cluster, h.VPN, h.Argo = true, connected, true
 		}
@@ -479,14 +480,15 @@ func (s *server) topology(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
-// setStep records how far the presenter clicked through onboarding: 0 to 3.
-// The fourth step, pushing a folder, is done once Argo CD deploys it.
+// setStep records how far the presenter clicked through onboarding: 0 to 2.
+// The last two steps, joining Argo CD and pushing a folder, are done once Argo
+// CD deploys the hospital's connector.
 func (s *server) setStep(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Step int `json:"step"`
 	}
-	if err := decode(r, &req); err != nil || req.Step < 0 || req.Step > 3 {
-		xds.WriteError(w, http.StatusBadRequest, errors.New("step must be 0 to 3"))
+	if err := decode(r, &req); err != nil || req.Step < 0 || req.Step > 2 {
+		xds.WriteError(w, http.StatusBadRequest, errors.New("step must be 0 to 2"))
 		return
 	}
 	s.mu.Lock()

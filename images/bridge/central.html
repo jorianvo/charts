@@ -71,7 +71,7 @@
       <li class="to" aria-hidden="true">→</li>
       <li><button class="step" data-step="2"><span class="num">02</span><span class="title">Open the connection</span><span class="desc">Two ports and a site-to-site VPN.</span></button><span class="who">Hospital IT</span></li>
       <li class="to" aria-hidden="true">→</li>
-      <li><button class="step" data-step="3"><span class="num">03</span><span class="title">Join the cluster to Argo</span><span class="desc">We configure Talos and register the cluster.</span></button><span class="who">Founda infra team</span></li>
+      <li><div class="step" data-step="3"><span class="num">03</span><span class="title">Join the cluster to Argo</span><span class="desc">We configure Talos and register the cluster.</span></div><span class="who">Founda infra team</span></li>
       <li class="to" aria-hidden="true">→</li>
       <li><div class="step" data-step="4"><span class="num">04</span><span class="title">Push a folder</span><span class="desc">Add a folder to git, and Argo deploys it.</span></div><span class="who">Integration consultant</span></li>
     </ol>
@@ -98,9 +98,10 @@
       return `<g class="${shown && !shown.has(key) ? "enter" : ""}">${body}</g>`;
     }
 
-    function box(cls, x, y, w, h, title, lines) {
+    // box draws a titled box; without lines, the title is centred vertically.
+    function box(cls, x, y, w, h, title, lines = []) {
       return `<rect class="${cls}" x="${x}" y="${y}" width="${w}" height="${h}" rx="12" />
-        <text class="t" x="${x + 16}" y="${y + 28}">${esc(title)}</text>
+        <text class="t" x="${x + 16}" y="${lines.length ? y + 28 : y + h / 2 + 6}">${esc(title)}</text>
         ${lines.map(([c, t], i) => `<text class="${c}" x="${x + 16}" y="${y + 50 + i * 18}">${esc(t)}</text>`).join("")}`;
     }
 
@@ -128,7 +129,8 @@
         ${box("box", hx + 20, y + 76, HW - 40, 62, "Source system", [["s", "Medical images and reports"]])}`;
 
       // The Talos cluster, once the hospital booted our image (step 1), and
-      // marked once it is registered with Argo CD (step 3).
+      // marked as registered with Argo CD (step 3) once Argo CD deployed the
+      // connector on it.
       if (h.cluster) {
         out += group(`${h.name}/cluster`, `
           <rect class="talos" x="${hx + 12}" y="${y + 160}" width="${HW - 24}" height="${RH - 172}" rx="12" />
@@ -140,7 +142,7 @@
       if (c) {
         out += group(`${h.name}/connector`, `
           <path class="arrow" d="M${hx + HW / 2} ${y + 138} V${y + 196}" marker-end="url(#arrow)" />
-          ${box("founda", adapter.x, adapter.y, adapter.w, adapter.h, "Founda adapter", [["s", "Our software, inside the hospital"]])}`);
+          ${box("founda", adapter.x, adapter.y, adapter.w, adapter.h, "Founda adapter")}`);
       } else if (h.cluster) {
         out += `<text class="empty" x="${hx + HW / 2}" y="${ay + 5}" text-anchor="middle">Nothing deployed yet</text>`;
       }
@@ -150,7 +152,7 @@
         const bx = bridge.x + BW / 2;
         out += group(`${h.name}/bridge`, `
           <path class="link" d="M${bx} ${bridge.y} V${central.y + central.h}" />
-          ${box("founda", bridge.x, bridge.y, BW, BH, h.bridge.display, [["s", "Bridge"]])}`);
+          ${box("founda", bridge.x, bridge.y, BW, BH, h.bridge.display)}`);
       }
 
       // The site-to-site VPN between the hospital and the cloud: up once the
@@ -186,7 +188,7 @@
         <rect class="cloud" x="${CX}" y="0" width="${CW}" height="${H}" rx="16" />
         <text class="h" x="${CX + 20}" y="36">Cloud</text>
         <text class="label" x="${CX + CW - 20}" y="34" text-anchor="end">AWS OR INTERMAX</text>
-        ${box("founda", central.x, central.y, central.w, central.h, "Founda central platform", [["s", "Routes each request between hospitals"]])}
+        ${box("founda", central.x, central.y, central.w, central.h, "Founda central platform")}
         ${hs.map(hospital).join("")}
         ${hs.length ? "" : `<text class="empty" x="${W / 2}" y="${H / 2}" text-anchor="middle">No hospitals configured.</text>`}`;
       const el = $("network");
@@ -196,7 +198,7 @@
     }
 
     // The onboarding steps. A step is done once the hospital being onboarded
-    // shows it; step 4 is done once Argo CD deployed its connector and bridge.
+    // shows it; steps 3 and 4 are done once Argo CD deployed its connector.
     let clicked = 0;
     function renderSteps(t) {
       clicked = t.step || 0;
@@ -206,8 +208,8 @@
       document.querySelectorAll(".step").forEach((el) => el.classList.toggle("done", done[el.dataset.step - 1]));
     }
 
-    // Clicking a step marks it, and the steps before it, as done. Clicking the
-    // last done step again undoes it, to rehearse the demo.
+    // Clicking step 1 or 2 marks it, and the step before it, as done. Clicking
+    // the last done step again undoes it, to rehearse the demo.
     document.querySelectorAll("button.step").forEach((b) => b.onclick = async () => {
       const n = Number(b.dataset.step);
       await fetch("/api/step", { method: "POST", body: JSON.stringify({ step: clicked === n ? n - 1 : n }) });
