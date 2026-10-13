@@ -23,11 +23,12 @@
     #network { display: block; width: 100%; height: auto; font-family: var(--font-sans); }
     #network .box { fill: var(--panel); stroke: var(--slate); stroke-width: 1.5; }
     #network .cloud { fill: var(--cloud-bg); stroke: var(--slate); stroke-width: 1.5; }
-    #network .talos { fill: none; stroke: var(--slate); stroke-width: 1.5; stroke-dasharray: 6 5; }
+    #network .container { fill: none; stroke: var(--slate); stroke-width: 1.5; stroke-dasharray: 6 5; }
     #network .founda { fill: var(--founda-bg); stroke: var(--founda); stroke-width: 2; }
     #network .h { fill: var(--fg); font-size: 22px; font-weight: 800; }
     #network .t { fill: var(--fg); font-size: 16px; font-weight: 700; }
     #network .s { fill: var(--fg-dim); font-size: 13px; }
+    #network .component { fill: var(--fg); font-size: 16px; font-family: var(--font-mono); font-weight: 500; }
     #network .label { fill: var(--slate); font-size: 11px; font-family: var(--font-mono); letter-spacing: .14em; }
     #network .empty { fill: var(--fg-dim); font-size: 14px; font-style: italic; }
     #network .arrow { stroke: var(--slate); stroke-width: 1.5; fill: none; }
@@ -85,9 +86,11 @@
 
     // Layout, in viewBox units. Hospitals alternate left and right of the
     // cloud, like the deck: Hospital A on the left, Hospital B on the right.
+    // Each hospital row has its Talos VM and, in the cloud, its namespace at
+    // the same height, so the VPN between them is a straight line.
     const W = 1260, HW = 300, GAP = 120, CX = HW + GAP, CW = W - 2 * CX;
-    const RH = 310, RGAP = 30, BW = 185, BH = 80;
-    const central = { x: CX + CW / 2 - 140, y: 76, w: 280, h: 80 };
+    const RH = 340, RGAP = 30, NW = 185, CT = 200, CH = 118;
+    const central = { x: CX + CW / 2 - 140, y: 60, w: 280, h: CH };
 
     let shown = null, next = new Set(), lastTopology = "";
 
@@ -98,11 +101,28 @@
       return `<g class="${shown && !shown.has(key) ? "enter" : ""}">${body}</g>`;
     }
 
-    // box draws a titled box; without lines, the title is centred vertically.
-    function box(cls, x, y, w, h, title, lines = []) {
-      return `<rect class="${cls}" x="${x}" y="${y}" width="${w}" height="${h}" rx="12" />
-        <text class="t" x="${x + 16}" y="${lines.length ? y + 28 : y + h / 2 + 6}">${esc(title)}</text>
-        ${lines.map(([c, t], i) => `<text class="${c}" x="${x + 16}" y="${y + 50 + i * 18}">${esc(t)}</text>`).join("")}`;
+    // box draws a box with a centred title and an optional centred subtitle.
+    function box(x, y, w, h, title, sub) {
+      const cx = x + w / 2;
+      return `<rect class="box" x="${x}" y="${y}" width="${w}" height="${h}" rx="12" />
+        <text class="t" x="${cx}" y="${sub ? y + 27 : y + h / 2 + 6}" text-anchor="middle">${esc(title)}</text>
+        ${sub ? `<text class="s" x="${cx}" y="${y + 47}" text-anchor="middle">${esc(sub)}</text>` : ""}`;
+    }
+
+    // container draws what components run in, a Talos VM or a namespace: a
+    // dashed outline with its kind in the corner and its name centred.
+    function container(x, y, w, kind, title, extra = "") {
+      return `<rect class="container" x="${x}" y="${y}" width="${w}" height="${CH}" rx="12" />
+        <text class="label" x="${x + 14}" y="${y + 20}">${kind}</text>${extra}
+        <text class="t" x="${x + w / 2}" y="${y + 46}" text-anchor="middle">${esc(title)}</text>`;
+    }
+
+    // component draws one of our charts, deployed by Argo CD, centred in the
+    // container at x, y: the same name as the folder that is pushed.
+    function component(x, y, w, name, pw) {
+      const cx = x + w / 2;
+      return `<rect class="founda" x="${cx - pw / 2}" y="${y + 62}" width="${pw}" height="40" rx="20" />
+        <text class="component" x="${cx}" y="${y + 87}" text-anchor="middle">${esc(name)}</text>`;
     }
 
     // lock draws a padlock centred on x, y; up is green, down is grey.
@@ -116,9 +136,10 @@
       const left = i % 2 === 0;
       const y = Math.floor(i / 2) * (RH + RGAP);
       const hx = left ? 0 : W - HW;
-      const ay = y + 240; // middle of the adapter, and of the VPN
-      const adapter = { x: hx + 28, y: y + 200, w: HW - 56, h: BH };
-      const bridge = { x: left ? CX + 20 : CX + CW - 20 - BW, y: y + 200, w: BW, h: BH };
+      const top = y + CT; // top of the Talos VM and the hospital's namespace
+      const ay = top + 82; // middle of their components, and of the VPN
+      const vm = { x: hx + 12, w: HW - 24, pw: 170 };
+      const ns = { x: left ? CX + 20 : CX + CW - 20 - NW, w: NW, pw: 130 };
       const c = h.connector;
       let out = "";
 
@@ -126,45 +147,45 @@
       out += `<rect class="box" x="${hx}" y="${y}" width="${HW}" height="${RH}" rx="16" />
         <text class="h" x="${hx + 20}" y="${y + 36}">${esc(h.display)}</text>
         <text class="label" x="${hx + HW - 20}" y="${y + 34}" text-anchor="end">ON-PREM</text>
-        ${box("box", hx + 20, y + 76, HW - 40, 62, "Source system", [["s", "Medical images and reports"]])}`;
+        ${box(hx + 20, y + 76, HW - 40, 62, "Source system", "Medical images and reports")}`;
 
-      // The Talos cluster, once the hospital booted our image (step 1), and
-      // marked as registered with Argo CD (step 3) once Argo CD deployed the
-      // connector on it.
+      // The Founda adapter is a Talos VM, once the hospital booted our image
+      // (step 1). It is marked as registered with Argo CD (step 3) once Argo CD
+      // deployed the connector on it.
       if (h.cluster) {
-        out += group(`${h.name}/cluster`, `
-          <rect class="talos" x="${hx + 12}" y="${y + 160}" width="${HW - 24}" height="${RH - 172}" rx="12" />
-          <text class="label" x="${hx + 28}" y="${y + 184}">TALOS CLUSTER</text>`);
+        out += group(`${h.name}/cluster`, container(vm.x, top, vm.w, "TALOS VM", "Founda adapter"));
         if (h.argo) {
-          out += group(`${h.name}/argo`, `<text class="label up" x="${hx + HW - 28}" y="${y + 184}" text-anchor="end">IN ARGO CD</text>`);
+          out += group(`${h.name}/argo`, `<text class="label up" x="${vm.x + vm.w - 14}" y="${top + 20}" text-anchor="end">IN ARGO CD</text>`);
         }
       }
       if (c) {
         out += group(`${h.name}/connector`, `
-          <path class="arrow" d="M${hx + HW / 2} ${y + 138} V${y + 196}" marker-end="url(#arrow)" />
-          ${box("founda", adapter.x, adapter.y, adapter.w, adapter.h, "Founda adapter")}`);
+          <path class="arrow" d="M${hx + HW / 2} ${y + 138} V${top - 4}" marker-end="url(#arrow)" />
+          ${component(vm.x, top, vm.w, "connector", vm.pw)}`);
       } else if (h.cluster) {
-        out += `<text class="empty" x="${hx + HW / 2}" y="${ay + 5}" text-anchor="middle">Nothing deployed yet</text>`;
+        out += `<text class="empty" x="${vm.x + vm.w / 2}" y="${ay + 5}" text-anchor="middle">Nothing deployed yet</text>`;
       }
 
-      // The hospital's bridge, in the cloud, only once Argo CD deployed it.
+      // The hospital's namespace in the cloud, with its bridge, only once
+      // Argo CD deployed it.
       if (h.bridge) {
-        const bx = bridge.x + BW / 2;
         out += group(`${h.name}/bridge`, `
-          <path class="link" d="M${bx} ${bridge.y} V${central.y + central.h}" />
-          ${box("founda", bridge.x, bridge.y, BW, BH, h.bridge.display)}`);
+          <path class="link" d="M${ns.x + NW / 2} ${top} V${central.y + central.h}" />
+          ${container(ns.x, top, NW, "NAMESPACE", h.bridge.display)}
+          ${component(ns.x, top, NW, "bridge", ns.pw)}`);
       }
 
       // The site-to-site VPN between the hospital and the cloud: up once the
-      // hospital opened it (step 2). Traffic flows through it once the
-      // connector reaches its bridge.
+      // hospital opened it (step 2). Traffic flows through it, from connector
+      // to bridge, once the connector reaches its bridge.
       const gx = left ? HW : CX + CW; // start of the gap between hospital and cloud
       const mid = gx + GAP / 2;
       if (h.vpn) {
-        const [x1, x2] = left ? [adapter.x + adapter.w, bridge.x] : [bridge.x + BW, adapter.x];
+        const vmEdge = vm.x + vm.w / 2 + (left ? vm.pw / 2 : -vm.pw / 2);
+        const nsEdge = ns.x + NW / 2 + (left ? -ns.pw / 2 : ns.pw / 2);
         out += group(`${h.name}/vpn`, `
           <rect class="vpn" x="${gx + 6}" y="${ay - 16}" width="${GAP - 12}" height="32" rx="16" />
-          ${c && h.bridge ? `<path class="flow" d="M${x1} ${ay} H${x2}" />` : ""}
+          ${c && h.bridge ? `<path class="flow" d="M${vmEdge} ${ay} H${nsEdge}" />` : ""}
           ${lock(mid, ay - 1, true)}
           <text class="vpn-label up" x="${mid}" y="${ay - 26}" text-anchor="middle">VPN</text>
           <text class="vpn-label up" x="${mid}" y="${ay + 36}" text-anchor="middle">up</text>`);
@@ -188,7 +209,8 @@
         <rect class="cloud" x="${CX}" y="0" width="${CW}" height="${H}" rx="16" />
         <text class="h" x="${CX + 20}" y="36">Cloud</text>
         <text class="label" x="${CX + CW - 20}" y="34" text-anchor="end">AWS OR INTERMAX</text>
-        ${box("founda", central.x, central.y, central.w, central.h, "Founda central platform")}
+        ${container(central.x, central.y, central.w, "NAMESPACE", "Founda central platform")}
+        ${component(central.x, central.y, central.w, "bridge", 130)}
         ${hs.map(hospital).join("")}
         ${hs.length ? "" : `<text class="empty" x="${W / 2}" y="${H / 2}" text-anchor="middle">No hospitals configured.</text>`}`;
       const el = $("network");
