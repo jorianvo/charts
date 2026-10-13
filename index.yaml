@@ -2,6 +2,16 @@ apiVersion: v1
 entries:
   bridge:
   - apiVersion: v2
+    created: "2026-10-13T12:11:54.163452+02:00"
+    description: Demo cloud bridge; an IHE XCA gateway per hospital, or the central
+      bridge that connects them
+    digest: 2a21015bd283dc80b22b0b79487656253ba45de3266df3526594acfb3757c260
+    name: bridge
+    type: application
+    urls:
+    - https://jorianvo.github.io/charts/bridge-0.2.0.tgz
+    version: 0.2.0
+  - apiVersion: v2
     created: "2026-10-12T20:48:45.249482+02:00"
     description: Demo cloud bridge; an IHE XCA gateway per hospital, or the central
       bridge that connects them
@@ -13,6 +23,16 @@ entries:
     version: 0.1.0
   connector:
   - apiVersion: v2
+    created: "2026-10-13T12:11:54.163571+02:00"
+    description: Demo connector in a hospital; receives HL7 v2 from the EMR and registers
+      documents with its bridge
+    digest: 99a74d134acba9de3c4aea277ae2f4763184df1021070aa9f34bc29a02b80e23
+    name: connector
+    type: application
+    urls:
+    - https://jorianvo.github.io/charts/connector-0.2.0.tgz
+    version: 0.2.0
+  - apiVersion: v2
     created: "2026-10-12T20:48:45.249934+02:00"
     description: Demo connector in a hospital; receives HL7 v2 from the EMR and registers
       documents with its bridge
@@ -22,4 +42,4 @@ entries:
     urls:
     - https://jorianvo.github.io/charts/connector-0.1.0.tgz
     version: 0.1.0
-generated: "2026-10-12T20:48:45.249094+02:00"
+generated: "2026-10-13T12:11:54.162651+02:00"
