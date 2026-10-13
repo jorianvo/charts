@@ -55,7 +55,7 @@
     const $ = (id) => document.getElementById(id);
     const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     const time = (t) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-    const display = (n) => n.split(/[-_ ]+/).map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
+    const display = (d) => d.communityName || d.community.split(/[-_ ]+/).map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
     let patientsRendered = false;
     let selected = null;
 
@@ -95,7 +95,7 @@
         const local = d.community === hospital;
         return `<li>
           <div class="row"><span class="title">${esc(d.title)}</span>
-            <span class="${local ? "ok" : "remote"}">${local ? "this hospital" : "from " + esc(display(d.community))}</span>
+            <span class="${local ? "ok" : "remote"}">${local ? "this hospital" : "from " + esc(display(d))}</span>
             <span class="code">${local ? "ITI-18" : "ITI-38"}</span></div>
           <div class="row meta"><span class="mono">${time(d.created)}</span><span>${esc(d.source)}</span>
             <button class="ghost" data-c="${esc(d.community)}" data-id="${esc(d.id)}">Open</button></div>
@@ -110,8 +110,8 @@
       const d = await r.json();
       if (!r.ok) { $("document").innerHTML = `<p class="err">${esc(d.error)}</p>`; return; }
       const local = d.community === hospital;
-      $("document").innerHTML = `<p class="meta">${local ? "Opened from this hospital's bridge" : "Fetched from " + esc(display(d.community)) + " through the central bridge"} <span class="code">${local ? "ITI-43" : "ITI-39"}</span></p>
-        <pre class="doc-content"><strong>${esc(d.title)}</strong> · ${esc(d.patientName)} · ${esc(display(d.community))} (${esc(d.source)})\n\n${esc(d.content)}</pre>`;
+      $("document").innerHTML = `<p class="meta">${local ? "Opened from this hospital's bridge" : "Fetched from " + esc(display(d)) + " through the central bridge"} <span class="code">${local ? "ITI-43" : "ITI-39"}</span></p>
+        <pre class="doc-content"><strong>${esc(d.title)}</strong> · ${esc(d.patientName)} · ${esc(display(d))} (${esc(d.source)})\n\n${esc(d.content)}</pre>`;
     }
 
     $("simulate").onclick = async () => {

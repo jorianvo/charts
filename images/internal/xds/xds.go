@@ -44,15 +44,16 @@ var (
 
 // Document is a clinical document. Query results leave Content empty.
 type Document struct {
-	ID          string    `json:"id"`
-	PatientID   string    `json:"patientId"`
-	PatientName string    `json:"patientName"`
-	Title       string    `json:"title"`
-	Code        string    `json:"code"`
-	Community   string    `json:"community"`
-	Source      string    `json:"source"`
-	Created     time.Time `json:"created"`
-	Content     string    `json:"content,omitempty"`
+	ID            string    `json:"id"`
+	PatientID     string    `json:"patientId"`
+	PatientName   string    `json:"patientName"`
+	Title         string    `json:"title"`
+	Code          string    `json:"code"`
+	Community     string    `json:"community"`
+	CommunityName string    `json:"communityName,omitempty"` // display name of the community
+	Source        string    `json:"source"`
+	Created       time.Time `json:"created"`
+	Content       string    `json:"content,omitempty"`
 }
 
 // Entry returns the document metadata without its content.
@@ -64,6 +65,7 @@ func (d Document) Entry() Document {
 type QueryRequest struct {
 	PatientID string `json:"patientId"`
 	From      string `json:"from"`
+	FromName  string `json:"fromName,omitempty"`
 }
 
 type QueryResponse struct {
@@ -75,10 +77,12 @@ type RetrieveRequest struct {
 	Community  string `json:"community"`
 	DocumentID string `json:"documentId"`
 	From       string `json:"from"`
+	FromName   string `json:"fromName,omitempty"`
 }
 
 type RegisterCommunity struct {
 	Community string `json:"community"`
+	Name      string `json:"name,omitempty"`
 	URL       string `json:"url"`
 }
 
@@ -178,6 +182,14 @@ func Env(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// Label returns display, or the display name of name when display is empty.
+func Label(name, display string) string {
+	if display != "" {
+		return display
+	}
+	return DisplayName(name)
 }
 
 // DisplayName turns "hospital-a" into "Hospital A".

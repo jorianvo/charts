@@ -29,7 +29,7 @@ var indexHTML string
 
 type config struct {
 	Hospital        string // e.g. hospital-a
-	HospitalDisplay string // e.g. Hospital A
+	HospitalDisplay string // e.g. Hospital A, from HOSPITAL_DISPLAY
 	EMR             string // name of the hospital's EMR
 	BridgeEndpoint  string // the bridge's Tailscale name, shown in the UI
 	BridgeURL       string // the bridge's URL, e.g. https://hospital-a-bridge.example.ts.net
@@ -65,7 +65,7 @@ func main() {
 	s := &server{
 		cfg: config{
 			Hospital:        hospital,
-			HospitalDisplay: xds.DisplayName(hospital),
+			HospitalDisplay: xds.Env("HOSPITAL_DISPLAY", xds.DisplayName(hospital)),
 			EMR:             xds.Env("EMR_NAME", "EMR"),
 			BridgeEndpoint:  endpoint,
 			BridgeURL:       strings.TrimRight(xds.Env("BRIDGE_URL", "http://"+endpoint), "/"),

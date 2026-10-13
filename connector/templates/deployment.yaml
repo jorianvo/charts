@@ -28,6 +28,10 @@ spec:
           env:
             - name: HOSPITAL_NAME
               value: {{ required "hospitalName is required" .Values.hospitalName | quote }}
+            {{- with .Values.hospitalDisplayName }}
+            - name: HOSPITAL_DISPLAY
+              value: {{ . | quote }}
+            {{- end }}
             - name: EMR_NAME
               value: {{ .Values.emrName | quote }}
             - name: BRIDGE_ENDPOINT

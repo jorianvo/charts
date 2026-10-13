@@ -1,4 +1,7 @@
 hospitalName: ""
+# Name shown in the UIs, e.g. "Hospital A (Talos)". Defaults to hospitalName
+# in title case ("hospital-a" becomes "Hospital A").
+hospitalDisplayName: ""
 tailnetDomain: ""
 
 emrName: "EMR"

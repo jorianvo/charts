@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="refresh" content="3" />
-  <title>{{if .Central}}Central bridge{{else}}{{display .Name}} bridge{{end}}</title>
+  <title>{{if .Central}}Central bridge{{else}}{{.Display}} bridge{{end}}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=JetBrains+Mono:wght@400;500&display=swap" />
@@ -17,8 +17,8 @@
       <p class="eyebrow"><span class="rule">/</span><span class="demo">Demo</span>Bridge · cloud · links every hospital</p>
       <h1>Central bridge</h1>
       {{else}}
-      <p class="eyebrow"><span class="rule">/</span><span class="demo">Demo</span>Bridge · cloud · connects {{display .Name}} to the network</p>
-      <h1>{{display .Name}} bridge</h1>
+      <p class="eyebrow"><span class="rule">/</span><span class="demo">Demo</span>Bridge · cloud · connects {{.Display}} to the network</p>
+      <h1>{{.Display}} bridge</h1>
       {{end}}
     </div>
     <div class="chips">
@@ -41,7 +41,7 @@
         <tr><th>Hospital</th><th>Bridge address (in the cluster)</th><th>Last seen</th></tr>
         {{range .Communities}}
         <tr>
-          <td><span class="row"><span class="dot{{if not .Active}} down{{end}}"></span><span class="title">{{display .Name}}</span></span></td>
+          <td><span class="row"><span class="dot{{if not .Active}} down{{end}}"></span><span class="title">{{.Display}}</span></span></td>
           <td class="mono">{{.URL}}</td>
           <td class="when">{{ago .LastSeen}}</td>
         </tr>

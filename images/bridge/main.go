@@ -37,12 +37,14 @@ const activeFor = 30 * time.Second
 
 type community struct {
 	Name     string
+	Display  string
 	URL      string
 	LastSeen time.Time
 }
 
 type server struct {
 	name       string // hospital name, or "central"
+	display    string // hospital display name, e.g. Hospital A
 	central    bool
 	centralURL string // gateway mode: the central bridge
 	selfURL    string // gateway mode: how the central bridge reaches this bridge
@@ -62,12 +64,14 @@ func main() {
 		log.Fatalf("MODE must be gateway or central, got %q", mode)
 	}
 	port := xds.Env("PORT", "8080")
+	name := xds.Env("HOSPITAL_NAME", "central")
 	s := &server{
-		name:        xds.Env("HOSPITAL_NAME", "central"),
+		name:        name,
+		display:     xds.Env("HOSPITAL_DISPLAY", xds.DisplayName(name)),
 		central:     mode == "central",
 		centralURL:  strings.TrimRight(xds.Env("CENTRAL_URL", "http://bridge-central"), "/"),
 		selfURL:     strings.TrimRight(xds.Env("SELF_URL", "http://localhost:"+port), "/"),
-		tmpl:        template.Must(template.New("index").Funcs(template.FuncMap{"display": xds.DisplayName, "ago": ago}).Parse(indexHTML)),
+		tmpl:        template.Must(template.New("index").Funcs(template.FuncMap{"ago": ago}).Parse(indexHTML)),
 		docs:        map[string]xds.Document{},
 		communities: map[string]*community{},
 	}
@@ -101,7 +105,7 @@ func main() {
 func (s *server) joinNetwork() {
 	for {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		err := xds.PostJSON(ctx, s.centralURL+"/directory/register", xds.RegisterCommunity{Community: s.name, URL: s.selfURL}, nil)
+		err := xds.PostJSON(ctx, s.centralURL+"/directory/register", xds.RegisterCommunity{Community: s.name, Name: s.display, URL: s.selfURL}, nil)
 		cancel()
 
 		s.mu.Lock()
@@ -131,6 +135,7 @@ func (s *server) registerDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	doc.Community = s.name
+	doc.CommunityName = s.display
 	s.mu.Lock()
 	s.docs[doc.ID] = doc
 	s.mu.Unlock()
@@ -147,7 +152,7 @@ func (s *server) query(w http.ResponseWriter, r *http.Request) {
 
 	resp := xds.QueryResponse{Documents: local}
 	var remote xds.QueryResponse
-	err := xds.PostJSON(r.Context(), s.centralURL+"/xca/query", xds.QueryRequest{PatientID: pid, From: s.name}, &remote)
+	err := xds.PostJSON(r.Context(), s.centralURL+"/xca/query", xds.QueryRequest{PatientID: pid, From: s.name, FromName: s.display}, &remote)
 	if err != nil {
 		s.log.Add(xds.ITI38, "Central bridge unreachable: "+err.Error(), false)
 		resp.Errors = append(resp.Errors, "Other hospitals unreachable: "+err.Error())
@@ -174,13 +179,13 @@ func (s *server) retrieve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var doc xds.Document
-	err := xds.PostJSON(r.Context(), s.centralURL+"/xca/retrieve", xds.RetrieveRequest{Community: from, DocumentID: id, From: s.name}, &doc)
+	err := xds.PostJSON(r.Context(), s.centralURL+"/xca/retrieve", xds.RetrieveRequest{Community: from, DocumentID: id, From: s.name, FromName: s.display}, &doc)
 	if err != nil {
 		s.log.Add(xds.ITI39, fmt.Sprintf("Retrieve from %s failed: %v", xds.DisplayName(from), err), false)
 		xds.WriteError(w, http.StatusBadGateway, err)
 		return
 	}
-	s.log.Add(xds.ITI39, fmt.Sprintf("Retrieved %s for %s from %s", doc.Title, doc.PatientName, xds.DisplayName(from)), true)
+	s.log.Add(xds.ITI39, fmt.Sprintf("Retrieved %s for %s from %s", doc.Title, doc.PatientName, xds.Label(doc.Community, doc.CommunityName)), true)
 	xds.WriteJSON(w, http.StatusOK, doc)
 }
 
@@ -192,7 +197,7 @@ func (s *server) respondQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	docs := s.local(q.PatientID)
-	s.log.Add(xds.ITI38, fmt.Sprintf("%s asks for patient %s: answered with %d document(s)", xds.DisplayName(q.From), q.PatientID, len(docs)), true)
+	s.log.Add(xds.ITI38, fmt.Sprintf("%s asks for patient %s: answered with %d document(s)", xds.Label(q.From, q.FromName), q.PatientID, len(docs)), true)
 	xds.WriteJSON(w, http.StatusOK, xds.QueryResponse{Documents: docs})
 }
 
@@ -205,11 +210,11 @@ func (s *server) respondRetrieve(w http.ResponseWriter, r *http.Request) {
 	}
 	doc, ok := s.get(q.DocumentID)
 	if !ok {
-		s.log.Add(xds.ITI39, fmt.Sprintf("%s asks for unknown document %s", xds.DisplayName(q.From), q.DocumentID), false)
+		s.log.Add(xds.ITI39, fmt.Sprintf("%s asks for unknown document %s", xds.Label(q.From, q.FromName), q.DocumentID), false)
 		xds.WriteError(w, http.StatusNotFound, errors.New("document not found"))
 		return
 	}
-	s.log.Add(xds.ITI39, fmt.Sprintf("Sent %s for %s to %s", doc.Title, doc.PatientName, xds.DisplayName(q.From)), true)
+	s.log.Add(xds.ITI39, fmt.Sprintf("Sent %s for %s to %s", doc.Title, doc.PatientName, xds.Label(q.From, q.FromName)), true)
 	xds.WriteJSON(w, http.StatusOK, doc)
 }
 
@@ -243,10 +248,10 @@ func (s *server) registerCommunity(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	c, known := s.communities[reg.Community]
 	rejoined := !known || time.Since(c.LastSeen) > activeFor
-	s.communities[reg.Community] = &community{Name: reg.Community, URL: reg.URL, LastSeen: time.Now()}
+	s.communities[reg.Community] = &community{Name: reg.Community, Display: xds.Label(reg.Community, reg.Name), URL: reg.URL, LastSeen: time.Now()}
 	s.mu.Unlock()
 	if rejoined {
-		s.log.Add(xds.Join, xds.DisplayName(reg.Community)+" joined the network", true)
+		s.log.Add(xds.Join, xds.Label(reg.Community, reg.Name)+" joined the network", true)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -260,6 +265,7 @@ func (s *server) routeQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	peers := slices.DeleteFunc(s.active(), func(c community) bool { return c.Name == q.From })
+	from := xds.Label(q.From, q.FromName)
 
 	var (
 		mu   sync.Mutex
@@ -273,17 +279,17 @@ func (s *server) routeQuery(w http.ResponseWriter, r *http.Request) {
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
-				s.log.Add(xds.ITI38, fmt.Sprintf("%s → %s failed: %v", xds.DisplayName(q.From), xds.DisplayName(peer.Name), err), false)
-				resp.Errors = append(resp.Errors, fmt.Sprintf("%s: %v", xds.DisplayName(peer.Name), err))
+				s.log.Add(xds.ITI38, fmt.Sprintf("%s → %s failed: %v", from, peer.Display, err), false)
+				resp.Errors = append(resp.Errors, fmt.Sprintf("%s: %v", peer.Display, err))
 				return
 			}
-			s.log.Add(xds.ITI38, fmt.Sprintf("%s → %s: %d document(s) for patient %s", xds.DisplayName(q.From), xds.DisplayName(peer.Name), len(res.Documents), q.PatientID), true)
+			s.log.Add(xds.ITI38, fmt.Sprintf("%s → %s: %d document(s) for patient %s", from, peer.Display, len(res.Documents), q.PatientID), true)
 			resp.Documents = append(resp.Documents, res.Documents...)
 		})
 	}
 	wg.Wait()
 	if len(peers) == 0 {
-		s.log.Add(xds.ITI38, xds.DisplayName(q.From)+" asked, but no other hospital is connected", true)
+		s.log.Add(xds.ITI38, from+" asked, but no other hospital is connected", true)
 	}
 	xds.WriteJSON(w, http.StatusOK, resp)
 }
@@ -302,13 +308,14 @@ func (s *server) routeRetrieve(w http.ResponseWriter, r *http.Request) {
 		xds.WriteError(w, http.StatusNotFound, fmt.Errorf("unknown community %q", q.Community))
 		return
 	}
+	from := xds.Label(q.From, q.FromName)
 	var doc xds.Document
 	if err := xds.PostJSON(r.Context(), c.URL+"/xca/retrieve", q, &doc); err != nil {
-		s.log.Add(xds.ITI39, fmt.Sprintf("%s ← %s failed: %v", xds.DisplayName(q.From), xds.DisplayName(q.Community), err), false)
+		s.log.Add(xds.ITI39, fmt.Sprintf("%s ← %s failed: %v", from, c.Display, err), false)
 		xds.WriteError(w, http.StatusBadGateway, err)
 		return
 	}
-	s.log.Add(xds.ITI39, fmt.Sprintf("%s ← %s: %s", xds.DisplayName(q.From), xds.DisplayName(q.Community), doc.Title), true)
+	s.log.Add(xds.ITI39, fmt.Sprintf("%s ← %s: %s", from, c.Display, doc.Title), true)
 	xds.WriteJSON(w, http.StatusOK, doc)
 }
 
@@ -327,9 +334,9 @@ func (s *server) active() []community {
 // --- UI -------------------------------------------------------------------
 
 type communityView struct {
-	Name, URL string
-	Active    bool
-	LastSeen  time.Time
+	Name, Display, URL string
+	Active             bool
+	LastSeen           time.Time
 }
 
 func (s *server) index(w http.ResponseWriter, _ *http.Request) {
@@ -340,11 +347,11 @@ func (s *server) index(w http.ResponseWriter, _ *http.Request) {
 	}
 	var communities []communityView
 	for _, c := range s.communities {
-		communities = append(communities, communityView{c.Name, c.URL, time.Since(c.LastSeen) <= activeFor, c.LastSeen})
+		communities = append(communities, communityView{c.Name, c.Display, c.URL, time.Since(c.LastSeen) <= activeFor, c.LastSeen})
 	}
 	sort.Slice(communities, func(i, j int) bool { return communities[i].Name < communities[j].Name })
 	data := map[string]any{
-		"Name":         s.name,
+		"Display":      s.display,
 		"Central":      s.central,
 		"CentralURL":   s.centralURL,
 		"Registered":   s.registered,
