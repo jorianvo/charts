@@ -16,7 +16,7 @@
       --slate: #67829b;
       --cloud-bg: #dfe9f20d;
     }
-    #network { display: block; width: 100%; height: auto; font-family: var(--font-sans); }
+    #network { grid-column: 1 / -1; display: block; width: 100%; height: auto; padding: 16px 0; font-family: var(--font-sans); }
     #network .box { fill: var(--panel); stroke: var(--slate); stroke-width: 1.5; }
     #network .cloud { fill: var(--cloud-bg); stroke: var(--slate); stroke-width: 1.5; }
     #network .talos { fill: none; stroke: var(--slate); stroke-width: 1.5; stroke-dasharray: 6 5; }
@@ -24,7 +24,6 @@
     #network .h { fill: var(--fg); font-size: 22px; font-weight: 800; }
     #network .t { fill: var(--fg); font-size: 16px; font-weight: 700; }
     #network .s { fill: var(--fg-dim); font-size: 13px; }
-    #network .m { fill: var(--fg-dim); font-size: 12px; font-family: var(--font-mono); }
     #network .label { fill: var(--slate); font-size: 11px; font-family: var(--font-mono); letter-spacing: .14em; }
     #network .empty { fill: var(--fg-dim); font-size: 14px; font-style: italic; }
     #network .arrow { stroke: var(--slate); stroke-width: 1.5; fill: none; }
@@ -43,49 +42,19 @@
 <body>
   <header>
     <div>
-      <p class="eyebrow"><span class="rule">/</span><span class="demo">Demo</span>Bridge · cloud · links every hospital</p>
+      <p class="eyebrow"><span class="rule">/</span><span class="demo">Demo</span>Bridge · cloud · routes requests between hospitals</p>
       <h1>{{.Display}}</h1>
-    </div>
-    <div class="chips">
-      <span class="chip"><span class="label">Hospitals connected</span><span id="connected">–</span></span>
     </div>
   </header>
 
   <main>
-    <section class="wide">
-      <h2>The network</h2>
-      <p class="sub">Every hospital runs the connector on its own Talos cluster, on-prem. It reaches its bridge in the cloud over a site-to-site VPN. Argo CD deploys both from git.</p>
-      <svg id="network" role="img" aria-label="Hospitals and the cloud"></svg>
-    </section>
-
-    <section class="wide">
-      <h2>What happened</h2>
-      <table id="events">
-        <tr><th>Time</th><th>Step</th><th>Detail</th></tr>
-        <tr><td colspan="3" class="empty">Nothing yet.</td></tr>
-      </table>
-    </section>
-
-    <section class="wide">
-      <h2>The steps, and their IHE names</h2>
-      <p class="sub">The bridges follow IHE XCA: the standard for sharing medical documents between organisations. Each step is a numbered IHE transaction.</p>
-      <table>
-        {{range .Transactions}}
-        <tr>
-          <td class="step">{{.Name}}</td>
-          <td class="when">{{with .Code}}{{.}} {{end}}{{.IHEName}}</td>
-          <td>{{.Explain}}</td>
-        </tr>
-        {{end}}
-      </table>
-    </section>
+    <svg id="network" role="img" aria-label="Hospitals and the cloud"></svg>
   </main>
   <footer class="disclaimer">Demo built for TalosCon 2026. Simplified on purpose (synthetic patients, data kept in memory, no authentication) and not representative of production software.</footer>
 
   <script>
     const $ = (id) => document.getElementById(id);
     const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-    const time = (t) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
 
     // Layout, in viewBox units. Hospitals alternate left and right of the
     // cloud, like the deck: Hospital A on the left, Hospital B on the right.
@@ -125,19 +94,18 @@
       const c = h.connector;
       let out = "";
 
-      // The hospital, its source systems and its Talos cluster are always
+      // The hospital, its source system and its Talos cluster are always
       // there: they are the hospital's own infrastructure.
       out += `<rect class="box" x="${hx}" y="${y}" width="${HW}" height="${RH}" rx="16" />
         <text class="h" x="${hx + 20}" y="${y + 36}">${esc(h.display)}</text>
         <text class="label" x="${hx + HW - 20}" y="${y + 34}" text-anchor="end">ON-PREM</text>
-        ${box("box", hx + 20, y + 76, HW - 40, 62, "Source systems", [["s", c && c.emr ? "EMR · " + c.emr : "Medical images and reports"]])}
+        ${box("box", hx + 20, y + 76, HW - 40, 62, "Source system", [["s", "Medical images and reports"]])}
         <rect class="talos" x="${hx + 12}" y="${y + 160}" width="${HW - 24}" height="${RH - 172}" rx="12" />
         <text class="label" x="${hx + 28}" y="${y + 184}">TALOS CLUSTER</text>`;
       if (c) {
         out += group(`${h.name}/connector`, `
           <path class="arrow" d="M${hx + HW / 2} ${y + 138} V${y + 196}" marker-end="url(#arrow)" />
-          <text class="m" x="${hx + HW / 2 + 10}" y="${y + 153}">HL7 v2</text>
-          ${box("founda", adapter.x, adapter.y, adapter.w, adapter.h, "Founda adapter", [["m", "connector-" + c.name]])}`);
+          ${box("founda", adapter.x, adapter.y, adapter.w, adapter.h, "Founda adapter", [["s", "Our software, inside the hospital"]])}`);
       } else {
         out += `<text class="empty" x="${hx + HW / 2}" y="${ay + 5}" text-anchor="middle">Nothing deployed yet</text>`;
       }
@@ -147,7 +115,7 @@
         const bx = bridge.x + BW / 2;
         out += group(`${h.name}/bridge`, `
           <path class="link" d="M${bx} ${bridge.y} V${central.y + central.h}" />
-          ${box("founda", bridge.x, bridge.y, BW, BH, h.bridge.display, [["m", h.bridge.service]])}`);
+          ${box("founda", bridge.x, bridge.y, BW, BH, h.bridge.display, [["s", "Bridge"]])}`);
       }
 
       // The site-to-site VPN between the hospital and the cloud: up once the
@@ -183,7 +151,7 @@
         <rect class="cloud" x="${CX}" y="0" width="${CW}" height="${H}" rx="16" />
         <text class="h" x="${CX + 20}" y="36">Cloud</text>
         <text class="label" x="${CX + CW - 20}" y="34" text-anchor="end">AWS OR INTERMAX</text>
-        ${box("founda", central.x, central.y, central.w, central.h, "Founda central platform", [["m", "bridge-central.apps"]])}
+        ${box("founda", central.x, central.y, central.w, central.h, "Founda central platform", [["s", "Routes each request between hospitals"]])}
         ${hs.map(hospital).join("")}
         ${hs.length ? "" : `<text class="empty" x="${W / 2}" y="${H / 2}" text-anchor="middle">No hospitals configured.</text>`}`;
       const el = $("network");
@@ -192,27 +160,16 @@
       shown = next;
     }
 
-    function renderEvents(events) {
-      $("events").innerHTML = `<tr><th>Time</th><th>Step</th><th>Detail</th></tr>` + (events.length ? events.map((e) => `
-        <tr title="${esc(e.transaction.explain)}">
-          <td class="when">${time(e.time)}</td>
-          <td class="step"><span class="${e.ok ? "ok" : "err"}">${esc(e.transaction.name)}</span>${e.transaction.code ? ` <span class="code">${esc(e.transaction.code)}</span>` : ""}</td>
-          <td>${esc(e.detail)}</td>
-        </tr>`).join("") : `<tr><td colspan="3" class="empty">Nothing yet.</td></tr>`);
-    }
-
     async function refresh() {
       try {
         const t = await (await fetch("/api/topology", { cache: "no-store" })).json();
         const hs = t.hospitals || [];
-        $("connected").textContent = `${hs.filter((h) => h.connector && h.bridge).length} / ${hs.length}`;
         // Redraw only when something changed, so the VPN animation keeps running.
         const sig = JSON.stringify(hs);
         if (sig !== lastTopology) {
           lastTopology = sig;
           render(t);
         }
-        renderEvents(t.events || []);
       } catch (e) { /* keep the last state on screen */ }
     }
 

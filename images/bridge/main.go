@@ -101,7 +101,6 @@ func main() {
 		mux.HandleFunc("POST /directory/register", s.registerCommunity)
 		mux.HandleFunc("POST /xca/query", s.routeQuery)
 		mux.HandleFunc("POST /xca/retrieve", s.routeRetrieve)
-		go s.watchNetwork()
 	} else {
 		mux.HandleFunc("POST /connector/heartbeat", s.connectorHeartbeat)
 		mux.HandleFunc("POST /xds/register", s.registerDocument)
@@ -305,37 +304,6 @@ func (s *server) registerCommunity(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// watchNetwork logs hospitals' bridges and connectors coming and going, as the
-// central bridge sees them through the bridges' registrations.
-func (s *server) watchNetwork() {
-	type state struct{ bridge, connector bool }
-	seen := map[string]state{}
-	for {
-		for _, h := range s.sites() {
-			now := state{h.Bridge != nil, h.Connector != nil}
-			was := seen[h.Name]
-			seen[h.Name] = now
-			bridge := h.Display + " bridge"
-			if h.Bridge != nil {
-				bridge = h.Bridge.Display
-			}
-			switch {
-			case now.bridge && !was.bridge:
-				s.log.Add(xds.Join, bridge+" joined the network", true)
-			case !now.bridge && was.bridge:
-				s.log.Add(xds.Join, bridge+" left the network", false)
-			}
-			switch {
-			case now.connector && !was.connector:
-				s.log.Add(xds.Connect, fmt.Sprintf("%s: connector running on the on-prem Talos cluster, VPN up", h.Display), true)
-			case !now.connector && was.connector:
-				s.log.Add(xds.Connect, fmt.Sprintf("%s: connector unreachable, VPN down", h.Display), false)
-			}
-		}
-		time.Sleep(time.Second)
-	}
-}
-
 // routeQuery forwards a cross-gateway query to every other active hospital and
 // combines their answers.
 func (s *server) routeQuery(w http.ResponseWriter, r *http.Request) {
@@ -447,7 +415,6 @@ type site struct {
 
 type bridgeView struct {
 	Display string `json:"display"`
-	Service string `json:"service"` // e.g. bridge-hospital-a.apps
 }
 
 // sites returns the configured hospitals, in order, followed by any other
@@ -469,8 +436,7 @@ func (s *server) sites() []site {
 	for _, name := range names {
 		h := site{Name: name, Display: xds.DisplayName(name)}
 		if c, ok := s.communities[name]; ok && time.Since(c.LastSeen) <= activeFor {
-			service := strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(c.URL, "http://"), "https://"), ".svc.cluster.local")
-			h.Bridge = &bridgeView{Display: c.Display, Service: service}
+			h.Bridge = &bridgeView{Display: c.Display}
 			h.Connector = c.Connector
 		}
 		out = append(out, h)
@@ -481,9 +447,7 @@ func (s *server) sites() []site {
 // topology feeds the central page: every hospital and what runs where.
 func (s *server) topology(w http.ResponseWriter, _ *http.Request) {
 	xds.WriteJSON(w, http.StatusOK, map[string]any{
-		"central":   s.display,
 		"hospitals": s.sites(),
-		"events":    s.log.List(),
 	})
 }
 

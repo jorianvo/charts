@@ -94,7 +94,6 @@ type RegisterCommunity struct {
 type Connector struct {
 	Name    string `json:"name"`              // e.g. hospital-a-adapter
 	Display string `json:"display,omitempty"` // e.g. Hospital A Adapter
-	EMR     string `json:"emr,omitempty"`
 }
 
 // Event is one line in a component's transaction log.

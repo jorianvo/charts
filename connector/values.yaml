@@ -3,8 +3,6 @@ hospitalName: ""
 # in title case ("hospital-a" becomes "Hospital A").
 hospitalDisplayName: ""
 
-emrName: "EMR"
-
 # The bridge this connector registers documents with. Defaults to the bridge
 # Service of the same hospital: http://bridge-hospital-a for hospital-a-adapter.
 bridgeUrl: ""

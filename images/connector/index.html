@@ -16,14 +16,13 @@
       <h1>{{.HospitalDisplay}}</h1>
     </div>
     <div class="chips">
-      <span class="chip"><span class="label">EMR</span>{{.EMR}}</span>
       <span class="chip" id="bridge"><span class="dot down" id="bridge-dot"></span><span class="label">Bridge</span>{{.BridgeEndpoint}}</span>
     </div>
   </header>
 
   <main>
     <section>
-      <h2>Messages from {{.EMR}}</h2>
+      <h2>Messages from the EMR</h2>
       <p class="sub">The EMR sends each new result as an HL7 v2 message (ORU^R01). The connector stores it as a document and registers it with its bridge.</p>
       <button id="simulate">Receive message from EMR</button>
       <ul class="list" id="feed"></ul>

@@ -32,8 +32,6 @@ spec:
             - name: HOSPITAL_DISPLAY
               value: {{ . | quote }}
             {{- end }}
-            - name: EMR_NAME
-              value: {{ .Values.emrName | quote }}
             - name: BRIDGE_URL
               value: {{ include "connector.bridgeUrl" . | quote }}
           ports:

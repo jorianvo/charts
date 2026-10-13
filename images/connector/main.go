@@ -26,10 +26,12 @@ import (
 //go:embed index.html
 var indexHTML string
 
+// sendingApp names the simulated EMR in the HL7 messages it sends (MSH-3).
+const sendingApp = "EMR"
+
 type config struct {
 	Hospital        string // e.g. hospital-a
 	HospitalDisplay string // e.g. Hospital A, from HOSPITAL_DISPLAY
-	EMR             string // name of the hospital's EMR
 	BridgeEndpoint  string // the bridge's host, shown in the UI
 	BridgeURL       string // the bridge's URL, e.g. http://bridge-hospital-a
 }
@@ -69,7 +71,6 @@ func main() {
 		cfg: config{
 			Hospital:        hospital,
 			HospitalDisplay: xds.Env("HOSPITAL_DISPLAY", xds.DisplayName(hospital)),
-			EMR:             xds.Env("EMR_NAME", "EMR"),
 			BridgeEndpoint:  endpoint,
 			BridgeURL:       bridgeURL,
 		},
@@ -88,7 +89,7 @@ func main() {
 	mux.HandleFunc("GET /api/documents/{community}/{id}", s.retrieve)
 
 	addr := ":" + xds.Env("PORT", "8080")
-	log.Printf("connector for %s (EMR %s) listening on %s, bridge %s", s.cfg.Hospital, s.cfg.EMR, addr, s.cfg.BridgeURL)
+	log.Printf("connector for %s listening on %s, bridge %s", s.cfg.Hospital, addr, s.cfg.BridgeURL)
 	log.Fatal(http.ListenAndServe(addr, mux))
 }
 
@@ -117,7 +118,7 @@ func (s *server) simulate(w http.ResponseWriter, r *http.Request) {
 
 	p := hl7.Patients[rand.IntN(len(hl7.Patients))]
 	rep := hl7.Reports[rand.IntN(len(hl7.Reports))]
-	raw := hl7.BuildORU(s.cfg.EMR, strings.ToUpper(s.cfg.Hospital), controlID, p, rep, time.Now())
+	raw := hl7.BuildORU(sendingApp, strings.ToUpper(s.cfg.Hospital), controlID, p, rep, time.Now())
 
 	item, err := s.receive(r.Context(), raw)
 	if err != nil {
@@ -196,7 +197,7 @@ func (s *server) retrieve(w http.ResponseWriter, r *http.Request) {
 // watchBridge keeps telling the bridge that this connector is running, so the
 // central bridge can show it, and tracks whether the bridge is reachable.
 func (s *server) watchBridge() {
-	me := xds.Connector{Name: s.cfg.Hospital, Display: s.cfg.HospitalDisplay, EMR: s.cfg.EMR}
+	me := xds.Connector{Name: s.cfg.Hospital, Display: s.cfg.HospitalDisplay}
 	for {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		err := xds.PostJSON(ctx, s.cfg.BridgeURL+"/connector/heartbeat", me, nil)
