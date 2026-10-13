@@ -110,11 +110,12 @@
     }
 
     // container draws what components run in, a Talos VM or a namespace: a
-    // dashed outline with its kind in the corner and its name centred.
-    function container(x, y, w, kind, title, extra = "") {
+    // dashed outline with its name centred and, for a Talos VM, its kind in
+    // the corner.
+    function container(x, y, w, title, kind = "", extra = "") {
       return `<rect class="container" x="${x}" y="${y}" width="${w}" height="${CH}" rx="12" />
-        <text class="label" x="${x + 14}" y="${y + 20}">${kind}</text>${extra}
-        <text class="t" x="${x + w / 2}" y="${y + 46}" text-anchor="middle">${esc(title)}</text>`;
+        ${kind ? `<text class="label" x="${x + 14}" y="${y + 20}">${kind}</text>` : ""}${extra}
+        <text class="t" x="${x + w / 2}" y="${kind ? y + 46 : y + 40}" text-anchor="middle">${esc(title)}</text>`;
     }
 
     // component draws one of our charts, deployed by Argo CD, centred in the
@@ -153,7 +154,7 @@
       // (step 1). It is marked as registered with Argo CD (step 3) once Argo CD
       // deployed the connector on it.
       if (h.cluster) {
-        out += group(`${h.name}/cluster`, container(vm.x, top, vm.w, "TALOS VM", "Founda adapter"));
+        out += group(`${h.name}/cluster`, container(vm.x, top, vm.w, "Founda adapter", "TALOS VM"));
         if (h.argo) {
           out += group(`${h.name}/argo`, `<text class="label up" x="${vm.x + vm.w - 14}" y="${top + 20}" text-anchor="end">IN ARGO CD</text>`);
         }
@@ -167,11 +168,14 @@
       }
 
       // The hospital's namespace in the cloud, with its bridge, only once
-      // Argo CD deployed it.
+      // Argo CD deployed it. Its bridge links to the central bridge: out of the
+      // side facing the other hospital, then up past the namespace's name.
       if (h.bridge) {
+        const side = left ? ns.x + NW / 2 + ns.pw / 2 : ns.x + NW / 2 - ns.pw / 2;
+        const lx = left ? ns.x + NW - 13 : ns.x + 13, r = 8;
         out += group(`${h.name}/bridge`, `
-          <path class="link" d="M${ns.x + NW / 2} ${top} V${central.y + central.h}" />
-          ${container(ns.x, top, NW, "NAMESPACE", h.bridge.display)}
+          <path class="link" d="M${side} ${ay} H${left ? lx - r : lx + r} Q${lx} ${ay} ${lx} ${ay - r} V${central.y + 102}" />
+          ${container(ns.x, top, NW, h.bridge.display)}
           ${component(ns.x, top, NW, "bridge", ns.pw)}`);
       }
 
@@ -209,7 +213,7 @@
         <rect class="cloud" x="${CX}" y="0" width="${CW}" height="${H}" rx="16" />
         <text class="h" x="${CX + 20}" y="36">Cloud</text>
         <text class="label" x="${CX + CW - 20}" y="34" text-anchor="end">AWS OR INTERMAX</text>
-        ${container(central.x, central.y, central.w, "NAMESPACE", "Founda central platform")}
+        ${container(central.x, central.y, central.w, "Founda central platform")}
         ${component(central.x, central.y, central.w, "bridge", 130)}
         ${hs.map(hospital).join("")}
         ${hs.length ? "" : `<text class="empty" x="${W / 2}" y="${H / 2}" text-anchor="middle">No hospitals configured.</text>`}`;
