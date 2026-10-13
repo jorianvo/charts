@@ -2,18 +2,18 @@ hospitalName: ""
 # Name shown in the UIs, e.g. "Hospital A (Talos)". Defaults to hospitalName
 # in title case ("hospital-a" becomes "Hospital A").
 hospitalDisplayName: ""
-tailnetDomain: ""
 
 emrName: "EMR"
+
+# The bridge this connector registers documents with. Defaults to the bridge
+# Service of the same hospital: http://bridge-hospital-a for hospital-a-adapter.
+bridgeUrl: ""
 
 image:
   repository: jorianvo/connector
   pullPolicy: Always
 
 replicaCount: 1
-
-ingress:
-  enabled: true
 
 resources:
   requests:

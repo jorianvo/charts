@@ -7,10 +7,10 @@ mode: gateway
 
 centralBridge: "http://bridge-central"
 
-tailnetDomain: ""
-
-ingress:
-  enabled: true
+# Central mode: the hospitals in the network, e.g. [hospital-a, hospital-b].
+# Each one is drawn with its on-prem Talos cluster, even before anything is
+# deployed on it, so the overview shows which hospitals are not connected yet.
+hospitals: []
 
 image:
   repository: jorianvo/bridge

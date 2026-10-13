@@ -2,4 +2,4 @@ apiVersion: v2
 name: connector
 description: Demo connector in a hospital; receives HL7 v2 from the EMR and registers documents with its bridge
 type: application
-version: 0.2.0
+version: 0.3.0

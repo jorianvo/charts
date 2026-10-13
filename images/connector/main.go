@@ -12,7 +12,6 @@ import (
 	"io"
 	"log"
 	"math/rand/v2"
-	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -31,8 +30,8 @@ type config struct {
 	Hospital        string // e.g. hospital-a
 	HospitalDisplay string // e.g. Hospital A, from HOSPITAL_DISPLAY
 	EMR             string // name of the hospital's EMR
-	BridgeEndpoint  string // the bridge's Tailscale name, shown in the UI
-	BridgeURL       string // the bridge's URL, e.g. https://hospital-a-bridge.example.ts.net
+	BridgeEndpoint  string // the bridge's host, shown in the UI
+	BridgeURL       string // the bridge's URL, e.g. http://bridge-hospital-a
 }
 
 // feedItem is one HL7 message received from the EMR.
@@ -61,29 +60,21 @@ type server struct {
 
 func main() {
 	hospital := xds.Env("HOSPITAL_NAME", "hospital-a")
-	endpoint := xds.Env("BRIDGE_ENDPOINT", "localhost:8090")
+	bridgeURL := strings.TrimRight(xds.Env("BRIDGE_URL", "http://localhost:8090"), "/")
+	endpoint := bridgeURL
+	if u, err := url.Parse(bridgeURL); err == nil && u.Host != "" {
+		endpoint = u.Host
+	}
 	s := &server{
 		cfg: config{
 			Hospital:        hospital,
 			HospitalDisplay: xds.Env("HOSPITAL_DISPLAY", xds.DisplayName(hospital)),
 			EMR:             xds.Env("EMR_NAME", "EMR"),
 			BridgeEndpoint:  endpoint,
-			BridgeURL:       strings.TrimRight(xds.Env("BRIDGE_URL", "http://"+endpoint), "/"),
+			BridgeURL:       bridgeURL,
 		},
 		tmpl: template.Must(template.New("index").Parse(indexHTML)),
 		feed: []feedItem{},
-	}
-	// In Kubernetes the bridge is reached through a Tailscale egress Service.
-	// Dial that Service, but keep the bridge's name for TLS and the Host header.
-	if dial := xds.Env("BRIDGE_DIAL", ""); dial != "" {
-		dialer := &net.Dialer{Timeout: 5 * time.Second}
-		xds.Client.Transport = &http.Transport{
-			DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
-				return dialer.DialContext(ctx, network, dial)
-			},
-			ForceAttemptHTTP2:   true,
-			TLSHandshakeTimeout: 5 * time.Second,
-		}
 	}
 	go s.watchBridge()
 
@@ -202,11 +193,13 @@ func (s *server) retrieve(w http.ResponseWriter, r *http.Request) {
 	xds.WriteJSON(w, http.StatusOK, doc)
 }
 
-// watchBridge keeps track of whether the bridge is reachable.
+// watchBridge keeps telling the bridge that this connector is running, so the
+// central bridge can show it, and tracks whether the bridge is reachable.
 func (s *server) watchBridge() {
+	me := xds.Connector{Name: s.cfg.Hospital, Display: s.cfg.HospitalDisplay, EMR: s.cfg.EMR}
 	for {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		err := xds.GetJSON(ctx, s.cfg.BridgeURL+"/healthz", nil)
+		err := xds.PostJSON(ctx, s.cfg.BridgeURL+"/connector/heartbeat", me, nil)
 		cancel()
 		s.mu.Lock()
 		s.bridgeOK = err == nil
@@ -215,6 +208,6 @@ func (s *server) watchBridge() {
 			s.bridgeErr = err.Error()
 		}
 		s.mu.Unlock()
-		time.Sleep(5 * time.Second)
+		time.Sleep(3 * time.Second)
 	}
 }

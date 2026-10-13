@@ -6,7 +6,8 @@
 // documents from other hospitals (ITI-38/ITI-39).
 //
 // In central mode the bridge keeps the directory of hospital bridges and routes
-// cross-gateway queries and retrieves between them.
+// cross-gateway queries and retrieves between them. Its page draws the network:
+// the cloud, every hospital's on-prem Talos cluster and the VPNs between them.
 package main
 
 import (
@@ -29,33 +30,42 @@ import (
 	"github.com/jorianvo/charts/images/internal/xds"
 )
 
-//go:embed index.html
-var indexHTML string
+var (
+	//go:embed index.html
+	indexHTML string
+	//go:embed central.html
+	centralHTML string
+)
 
-// A hospital bridge counts as part of the network while it keeps registering.
+// A hospital bridge counts as part of the network while it keeps registering,
+// and a connector as connected while it keeps sending heartbeats.
 const activeFor = 30 * time.Second
 
 type community struct {
-	Name     string
-	Display  string
-	URL      string
-	LastSeen time.Time
+	Name      string
+	Display   string
+	URL       string
+	LastSeen  time.Time
+	Connector *xds.Connector // nil while the hospital's connector does not reach the bridge
 }
 
 type server struct {
 	name       string // hospital name, or "central"
 	display    string // hospital display name, e.g. Hospital A
 	central    bool
-	centralURL string // gateway mode: the central bridge
-	selfURL    string // gateway mode: how the central bridge reaches this bridge
+	centralURL string   // gateway mode: the central bridge
+	selfURL    string   // gateway mode: how the central bridge reaches this bridge
+	hospitals  []string // central mode: the hospitals to draw, connected or not
 	tmpl       *template.Template
 	log        xds.Log
 
-	mu          sync.Mutex
-	docs        map[string]xds.Document // gateway mode: the registry
-	communities map[string]*community   // central mode: the directory
-	registered  bool
-	centralErr  string
+	mu            sync.Mutex
+	docs          map[string]xds.Document // gateway mode: the registry
+	connector     *xds.Connector          // gateway mode: this hospital's connector
+	connectorSeen time.Time
+	communities   map[string]*community // central mode: the directory
+	registered    bool
+	centralErr    string
 }
 
 func main() {
@@ -65,13 +75,18 @@ func main() {
 	}
 	port := xds.Env("PORT", "8080")
 	name := xds.Env("HOSPITAL_NAME", "central")
+	page := indexHTML
+	if mode == "central" {
+		page = centralHTML
+	}
 	s := &server{
 		name:        name,
 		display:     xds.Env("HOSPITAL_DISPLAY", xds.DisplayName(name)),
 		central:     mode == "central",
 		centralURL:  strings.TrimRight(xds.Env("CENTRAL_URL", "http://bridge-central"), "/"),
 		selfURL:     strings.TrimRight(xds.Env("SELF_URL", "http://localhost:"+port), "/"),
-		tmpl:        template.Must(template.New("index").Funcs(template.FuncMap{"ago": ago}).Parse(indexHTML)),
+		hospitals:   strings.FieldsFunc(xds.Env("HOSPITALS", ""), func(r rune) bool { return r == ',' || r == ' ' }),
+		tmpl:        template.Must(template.New("index").Parse(page)),
 		docs:        map[string]xds.Document{},
 		communities: map[string]*community{},
 	}
@@ -82,10 +97,13 @@ func main() {
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { io.WriteString(w, "ok\n") })
 
 	if s.central {
+		mux.HandleFunc("GET /api/topology", s.topology)
 		mux.HandleFunc("POST /directory/register", s.registerCommunity)
 		mux.HandleFunc("POST /xca/query", s.routeQuery)
 		mux.HandleFunc("POST /xca/retrieve", s.routeRetrieve)
+		go s.watchNetwork()
 	} else {
+		mux.HandleFunc("POST /connector/heartbeat", s.connectorHeartbeat)
 		mux.HandleFunc("POST /xds/register", s.registerDocument)
 		mux.HandleFunc("GET /xds/query", s.query)
 		mux.HandleFunc("GET /xds/retrieve", s.retrieve)
@@ -101,11 +119,20 @@ func main() {
 // --- Gateway mode ---------------------------------------------------------
 
 // joinNetwork registers this bridge with the central bridge, and keeps doing
-// so, so the central bridge knows which hospitals are online.
+// so, so the central bridge knows which hospitals and connectors are online.
 func (s *server) joinNetwork() {
+	connected := false
 	for {
+		s.mu.Lock()
+		conn := s.connectedConnector()
+		s.mu.Unlock()
+		if connected && conn == nil {
+			s.log.Add(xds.Connect, "Lost the connector in the hospital", false)
+		}
+		connected = conn != nil
+
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		err := xds.PostJSON(ctx, s.centralURL+"/directory/register", xds.RegisterCommunity{Community: s.name, Name: s.display, URL: s.selfURL}, nil)
+		err := xds.PostJSON(ctx, s.centralURL+"/directory/register", xds.RegisterCommunity{Community: s.name, Name: s.display, URL: s.selfURL, Connector: conn}, nil)
 		cancel()
 
 		s.mu.Lock()
@@ -123,8 +150,35 @@ func (s *server) joinNetwork() {
 		case err != nil && was:
 			s.log.Add(xds.Join, "Lost the central bridge: "+err.Error(), false)
 		}
-		time.Sleep(10 * time.Second)
+		time.Sleep(3 * time.Second)
 	}
+}
+
+// connectorHeartbeat records that the hospital's connector reaches this bridge.
+func (s *server) connectorHeartbeat(w http.ResponseWriter, r *http.Request) {
+	var c xds.Connector
+	if err := decode(r, &c); err != nil || c.Name == "" {
+		xds.WriteError(w, http.StatusBadRequest, errors.New("name is required"))
+		return
+	}
+	s.mu.Lock()
+	was := s.connectedConnector() != nil
+	s.connector, s.connectorSeen = &c, time.Now()
+	s.mu.Unlock()
+	if !was {
+		s.log.Add(xds.Connect, xds.Label(c.Name, c.Display)+" connected from the hospital", true)
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// connectedConnector returns the hospital's connector while it keeps sending
+// heartbeats, or nil. The caller holds s.mu.
+func (s *server) connectedConnector() *xds.Connector {
+	if s.connector == nil || time.Since(s.connectorSeen) > activeFor {
+		return nil
+	}
+	c := *s.connector
+	return &c
 }
 
 // registerDocument stores a document the hospital's connector sends (ITI-42).
@@ -246,14 +300,40 @@ func (s *server) registerCommunity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.mu.Lock()
-	c, known := s.communities[reg.Community]
-	rejoined := !known || time.Since(c.LastSeen) > activeFor
-	s.communities[reg.Community] = &community{Name: reg.Community, Display: xds.Label(reg.Community, reg.Name), URL: reg.URL, LastSeen: time.Now()}
+	s.communities[reg.Community] = &community{Name: reg.Community, Display: xds.Label(reg.Community, reg.Name), URL: reg.URL, LastSeen: time.Now(), Connector: reg.Connector}
 	s.mu.Unlock()
-	if rejoined {
-		s.log.Add(xds.Join, xds.Label(reg.Community, reg.Name)+" joined the network", true)
-	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// watchNetwork logs hospitals' bridges and connectors coming and going, as the
+// central bridge sees them through the bridges' registrations.
+func (s *server) watchNetwork() {
+	type state struct{ bridge, connector bool }
+	seen := map[string]state{}
+	for {
+		for _, h := range s.sites() {
+			now := state{h.Bridge != nil, h.Connector != nil}
+			was := seen[h.Name]
+			seen[h.Name] = now
+			bridge := h.Display + " bridge"
+			if h.Bridge != nil {
+				bridge = h.Bridge.Display
+			}
+			switch {
+			case now.bridge && !was.bridge:
+				s.log.Add(xds.Join, bridge+" joined the network", true)
+			case !now.bridge && was.bridge:
+				s.log.Add(xds.Join, bridge+" left the network", false)
+			}
+			switch {
+			case now.connector && !was.connector:
+				s.log.Add(xds.Connect, fmt.Sprintf("%s: connector running on the on-prem Talos cluster, VPN up", h.Display), true)
+			case !now.connector && was.connector:
+				s.log.Add(xds.Connect, fmt.Sprintf("%s: connector unreachable, VPN down", h.Display), false)
+			}
+		}
+		time.Sleep(time.Second)
+	}
 }
 
 // routeQuery forwards a cross-gateway query to every other active hospital and
@@ -333,32 +413,19 @@ func (s *server) active() []community {
 
 // --- UI -------------------------------------------------------------------
 
-type communityView struct {
-	Name, Display, URL string
-	Active             bool
-	LastSeen           time.Time
-}
-
 func (s *server) index(w http.ResponseWriter, _ *http.Request) {
 	s.mu.Lock()
 	patients := map[string]bool{}
 	for _, d := range s.docs {
 		patients[d.PatientID] = true
 	}
-	var communities []communityView
-	for _, c := range s.communities {
-		communities = append(communities, communityView{c.Name, c.Display, c.URL, time.Since(c.LastSeen) <= activeFor, c.LastSeen})
-	}
-	sort.Slice(communities, func(i, j int) bool { return communities[i].Name < communities[j].Name })
 	data := map[string]any{
 		"Display":      s.display,
-		"Central":      s.central,
-		"CentralURL":   s.centralURL,
 		"Registered":   s.registered,
 		"CentralErr":   s.centralErr,
+		"Connector":    s.connectedConnector(),
 		"Documents":    len(s.docs),
 		"Patients":     len(patients),
-		"Communities":  communities,
 		"Events":       s.log.List(),
 		"Transactions": xds.Transactions,
 	}
@@ -368,12 +435,56 @@ func (s *server) index(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
-func ago(t time.Time) string {
-	d := time.Since(t).Round(time.Second)
-	if d < time.Second {
-		return "just now"
+// site is a hospital as the central page draws it: its on-prem Talos cluster
+// with the connector, and its bridge in the cloud. Bridge and Connector are nil
+// while they are not deployed or not reachable.
+type site struct {
+	Name      string         `json:"name"`
+	Display   string         `json:"display"`
+	Bridge    *bridgeView    `json:"bridge"`
+	Connector *xds.Connector `json:"connector"`
+}
+
+type bridgeView struct {
+	Display string `json:"display"`
+	Service string `json:"service"` // e.g. bridge-hospital-a.apps
+}
+
+// sites returns the configured hospitals, in order, followed by any other
+// hospital whose bridge has registered.
+func (s *server) sites() []site {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	names := slices.Clone(s.hospitals)
+	var others []string
+	for name := range s.communities {
+		if !slices.Contains(names, name) {
+			others = append(others, name)
+		}
 	}
-	return d.String() + " ago"
+	sort.Strings(others)
+	names = append(names, others...)
+
+	out := make([]site, 0, len(names))
+	for _, name := range names {
+		h := site{Name: name, Display: xds.DisplayName(name)}
+		if c, ok := s.communities[name]; ok && time.Since(c.LastSeen) <= activeFor {
+			service := strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(c.URL, "http://"), "https://"), ".svc.cluster.local")
+			h.Bridge = &bridgeView{Display: c.Display, Service: service}
+			h.Connector = c.Connector
+		}
+		out = append(out, h)
+	}
+	return out
+}
+
+// topology feeds the central page: every hospital and what runs where.
+func (s *server) topology(w http.ResponseWriter, _ *http.Request) {
+	xds.WriteJSON(w, http.StatusOK, map[string]any{
+		"central":   s.display,
+		"hospitals": s.sites(),
+		"events":    s.log.List(),
+	})
 }
 
 func decode(r *http.Request, v any) error {

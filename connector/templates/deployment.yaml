@@ -34,12 +34,8 @@ spec:
             {{- end }}
             - name: EMR_NAME
               value: {{ .Values.emrName | quote }}
-            - name: BRIDGE_ENDPOINT
-              value: {{ include "connector.bridgeEndpoint" . | quote }}
             - name: BRIDGE_URL
-              value: "https://{{ include "connector.bridgeEndpoint" . }}"
-            - name: BRIDGE_DIAL
-              value: "{{ include "connector.fullname" . }}-bridge:443"
+              value: {{ include "connector.bridgeUrl" . | quote }}
           ports:
             - name: http
               containerPort: 8080

@@ -37,9 +37,11 @@ var (
 		"A bridge fetches a document that another hospital holds."}
 	Join = Transaction{"", "Join network", "",
 		"A hospital's bridge registers with the central bridge, so other hospitals can find it."}
+	Connect = Transaction{"", "Connect hospital", "",
+		"The connector on the hospital's Talos cluster reaches its bridge in the cloud, over the hospital's site-to-site VPN."}
 
 	// Transactions lists every step, in the order they happen in the demo.
-	Transactions = []Transaction{ITI42, ITI18, ITI38, ITI39, ITI43, Join}
+	Transactions = []Transaction{ITI42, ITI18, ITI38, ITI39, ITI43, Join, Connect}
 )
 
 // Document is a clinical document. Query results leave Content empty.
@@ -81,9 +83,18 @@ type RetrieveRequest struct {
 }
 
 type RegisterCommunity struct {
-	Community string `json:"community"`
-	Name      string `json:"name,omitempty"`
-	URL       string `json:"url"`
+	Community string     `json:"community"`
+	Name      string     `json:"name,omitempty"`
+	URL       string     `json:"url"`
+	Connector *Connector `json:"connector,omitempty"` // set while the hospital's connector reaches the bridge
+}
+
+// Connector describes a hospital's connector. The connector sends it to its
+// bridge as a heartbeat, and the bridge passes it on to the central bridge.
+type Connector struct {
+	Name    string `json:"name"`              // e.g. hospital-a-adapter
+	Display string `json:"display,omitempty"` // e.g. Hospital A Adapter
+	EMR     string `json:"emr,omitempty"`
 }
 
 // Event is one line in a component's transaction log.

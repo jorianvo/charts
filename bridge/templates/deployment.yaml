@@ -36,6 +36,10 @@ spec:
             {{- end }}
             - name: MODE
               value: {{ .Values.mode | quote }}
+            {{- with .Values.hospitals }}
+            - name: HOSPITALS
+              value: {{ join "," . | quote }}
+            {{- end }}
             - name: CENTRAL_URL
               value: {{ .Values.centralBridge | quote }}
             - name: SELF_URL

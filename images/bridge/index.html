@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="refresh" content="3" />
-  <title>{{if .Central}}Central bridge{{else}}{{.Display}} bridge{{end}}</title>
+  <title>{{.Display}} bridge</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=JetBrains+Mono:wght@400;500&display=swap" />
@@ -13,45 +13,18 @@
 <body>
   <header>
     <div>
-      {{if .Central}}
-      <p class="eyebrow"><span class="rule">/</span><span class="demo">Demo</span>Bridge · cloud · links every hospital</p>
-      <h1>Central bridge</h1>
-      {{else}}
       <p class="eyebrow"><span class="rule">/</span><span class="demo">Demo</span>Bridge · cloud · connects {{.Display}} to the network</p>
       <h1>{{.Display}} bridge</h1>
-      {{end}}
     </div>
     <div class="chips">
-      {{if .Central}}
-      <span class="chip"><span class="label">Hospitals</span>{{len .Communities}}</span>
-      {{else}}
       <span class="chip"><span class="label">Documents</span>{{.Documents}}</span>
       <span class="chip"><span class="label">Patients</span>{{.Patients}}</span>
+      <span class="chip"><span class="dot{{if not .Connector}} down{{end}}"></span><span class="label">Connector</span>{{if .Connector}}connected{{else}}not connected{{end}}</span>
       <span class="chip" title="{{.CentralErr}}"><span class="dot{{if not .Registered}} down{{end}}"></span><span class="label">Central bridge</span>{{if .Registered}}connected{{else}}unreachable{{end}}</span>
-      {{end}}
     </div>
   </header>
 
   <main>
-    {{if .Central}}
-    <section class="wide">
-      <h2>Hospitals in the network</h2>
-      <p class="sub">Each hospital's bridge registers here. Questions from one hospital are passed on to all the others.</p>
-      <table>
-        <tr><th>Hospital</th><th>Bridge address (in the cluster)</th><th>Last seen</th></tr>
-        {{range .Communities}}
-        <tr>
-          <td><span class="row"><span class="dot{{if not .Active}} down{{end}}"></span><span class="title">{{.Display}}</span></span></td>
-          <td class="mono">{{.URL}}</td>
-          <td class="when">{{ago .LastSeen}}</td>
-        </tr>
-        {{else}}
-        <tr><td colspan="3" class="empty">No hospital bridges have registered yet.</td></tr>
-        {{end}}
-      </table>
-    </section>
-    {{end}}
-
     <section class="wide">
       <h2>What happened</h2>
       <table>

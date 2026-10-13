@@ -41,7 +41,7 @@
       <h2>How it works</h2>
       <ol class="flow">
         <li><span class="title">The EMR sends a result.</span> An HL7 v2 message arrives at the connector, inside the hospital.</li>
-        <li><span class="title">Register document</span> <span class="code">ITI-42</span> The connector tells its bridge in the cloud that the document exists, over Tailscale.</li>
+        <li><span class="title">Register document</span> <span class="code">ITI-42</span> The connector tells its bridge in the cloud that the document exists, over the hospital's site-to-site VPN.</li>
         <li><span class="title">Find documents</span> <span class="code">ITI-18</span> A clinician picks a patient; the connector asks its bridge what exists for that patient.</li>
         <li><span class="title">Ask other hospitals</span> <span class="code">ITI-38</span> The bridge asks the bridges of the other hospitals, through the central bridge.</li>
         <li><span class="title">Fetch from other hospital</span> <span class="code">ITI-39</span> Opening another hospital's document fetches it the same way. Own documents come straight from the bridge <span class="code">ITI-43</span>.</li>
@@ -63,7 +63,7 @@
       try {
         const s = await (await fetch("/api/state", { cache: "no-store" })).json();
         $("bridge-dot").className = s.bridge.ok ? "dot" : "dot down";
-        $("bridge").title = s.bridge.ok ? "Bridge reachable over Tailscale" : s.bridge.error;
+        $("bridge").title = s.bridge.ok ? "Bridge reachable" : s.bridge.error;
         const feed = s.feed || [];
         $("feed").innerHTML = feed.length ? feed.map((m) => `
           <li>

@@ -22,6 +22,10 @@ app.kubernetes.io/name: {{ include "connector.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
-{{- define "connector.bridgeEndpoint" -}}
-{{- printf "%s-bridge.%s" .Values.hospitalName (required "tailnetDomain is required" .Values.tailnetDomain) }}
+{{/*
+The bridge of the connector's hospital, as a Service in the same cluster: the
+connector of hospital-a-adapter talks to bridge-hospital-a.
+*/}}
+{{- define "connector.bridgeUrl" -}}
+{{- .Values.bridgeUrl | default (printf "http://bridge-%s" (trimSuffix "-adapter" .Values.hospitalName)) }}
 {{- end }}
