@@ -9,7 +9,7 @@ bridgeUrl: ""
 
 image:
   repository: jorianvo/connector
-  pullPolicy: Always
+  pullPolicy: IfNotPresent
 
 replicaCount: 1
 

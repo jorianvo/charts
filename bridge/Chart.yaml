@@ -2,4 +2,4 @@ apiVersion: v2
 name: bridge
 description: Demo cloud bridge; an IHE XCA gateway per hospital, or the central bridge that connects them
 type: application
-version: 0.8.0
+version: 0.9.0

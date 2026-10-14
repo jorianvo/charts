@@ -6,58 +6,51 @@
   <title>Central bridge</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=JetBrains+Mono:wght@400;500&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;700;900&family=Karla:ital,wght@0,400;0,700;1,400&display=swap" />
   <link rel="stylesheet" href="/static/style.css" />
   <style>
-    /* Colours of the network slides in the TalosCon deck. */
-    :root {
-      --founda: #18c180;
-      --founda-bg: #18c1801f;
-      --slate: #67829b;
-      --cloud-bg: #dfe9f20d;
-    }
     body { display: flex; flex-direction: column; }
     main { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 48px; padding: 32px 48px; }
     footer.disclaimer { padding: 0 48px 24px; text-align: center; }
 
     #network { display: block; width: 100%; height: auto; font-family: var(--font-sans); }
     #network .box { fill: var(--panel); stroke: var(--slate); stroke-width: 1.5; }
-    #network .cloud { fill: var(--cloud-bg); stroke: var(--slate); stroke-width: 1.5; }
+    #network .cloud { fill: var(--light-blue); }
     #network .container { fill: none; stroke: var(--slate); stroke-width: 1.5; stroke-dasharray: 6 5; }
-    #network .founda { fill: var(--founda-bg); stroke: var(--founda); stroke-width: 2; }
-    #network .h { fill: var(--fg); font-size: 22px; font-weight: 800; }
-    #network .t { fill: var(--fg); font-size: 16px; font-weight: 700; }
+    #network .founda { fill: var(--light-green); stroke: var(--green); stroke-width: 1.5; }
+    #network .h { fill: var(--fg); font-family: var(--font-head); font-size: 22px; font-weight: 900; }
+    #network .t { fill: var(--fg); font-family: var(--font-head); font-size: 16px; font-weight: 900; }
     #network .s { fill: var(--fg-dim); font-size: 13px; }
-    #network .component { fill: var(--fg); font-size: 16px; font-family: var(--font-mono); font-weight: 500; }
-    #network .label { fill: var(--slate); font-size: 11px; font-family: var(--font-mono); letter-spacing: .14em; }
+    #network .component { fill: var(--fg); font-size: 16px; font-family: var(--font-mono); font-weight: 600; }
+    #network .label { fill: var(--slate); font-size: 11px; font-family: var(--font-head); font-weight: 900; letter-spacing: .17em; }
     #network .empty { fill: var(--fg-dim); font-size: 14px; font-style: italic; }
     #network .arrow { stroke: var(--slate); stroke-width: 1.5; fill: none; }
-    #network .link { stroke: var(--founda); stroke-width: 2; fill: none; }
-    #network .flow { stroke: var(--founda); stroke-width: 3; fill: none; stroke-dasharray: 8 8; animation: flow 1s linear infinite; }
-    #network .vpn { fill: var(--founda-bg); stroke: var(--founda); stroke-width: 2; }
+    #network .link { stroke: var(--green); stroke-width: 2; fill: none; }
+    #network .flow { stroke: var(--green); stroke-width: 3; fill: none; stroke-dasharray: 8 8; animation: flow 1s linear infinite; }
+    #network .vpn { fill: var(--light-green); stroke: var(--green); stroke-width: 1.5; }
     #network .vpn-down { fill: none; stroke: var(--fg-dim); stroke-width: 1.5; stroke-dasharray: 5 5; }
-    #network .vpn-label { font-size: 11px; font-family: var(--font-mono); letter-spacing: .08em; }
-    #network .up { fill: var(--founda); }
+    #network .vpn-label { font-size: 11px; font-family: var(--font-head); font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+    #network .up { fill: var(--green); }
     #network .down { fill: var(--fg-dim); }
     #network .enter { animation: enter .8s ease-out; transform-box: fill-box; transform-origin: center; }
 
     /* The onboarding steps, laid out like the deck's 4-step slide. */
     ol.steps { display: flex; align-items: flex-start; gap: 12px; margin: 0; padding: 0; list-style: none; }
     ol.steps > li { flex: 1; min-width: 0; }
-    ol.steps > li.to { flex: 0 0 auto; align-self: center; margin-bottom: 28px; color: var(--founda); font-size: 22px; }
+    ol.steps > li.to { flex: 0 0 auto; align-self: center; margin-bottom: 28px; color: var(--green); font-size: 22px; }
     .step {
       display: flex; flex-direction: column; gap: 6px; width: 100%; height: 100%; min-height: 160px; padding: 18px 20px;
       font: inherit; font-weight: 400; text-align: left; color: var(--fg);
-      background: var(--panel); border: 1.5px solid var(--line-2); border-radius: 12px;
+      background: var(--panel); border: 1.5px solid var(--slate); border-radius: 12px;
       transition: background .4s, border-color .4s;
     }
     button.step { cursor: pointer; }
-    button.step:hover { border-color: var(--founda); }
-    .step.done { background: var(--founda-bg); border-color: var(--founda); }
-    .step .num { font-family: var(--font-mono); font-size: 26px; color: var(--founda); line-height: 1.2; }
-    .step .title { font-size: 19px; font-weight: 700; }
+    button.step:hover { border-color: var(--green); }
+    .step.done { background: var(--light-green); border-color: var(--green); }
+    .step .num { font-family: var(--font-head); font-weight: 900; font-size: 26px; color: var(--green); line-height: 1.2; }
+    .step .title { font-family: var(--font-head); font-size: 19px; font-weight: 900; }
     .step .desc { font-size: 15px; color: var(--fg-dim); }
-    ol.steps .who { display: block; margin-top: 10px; text-align: center; font-family: var(--font-mono); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--slate); }
+    ol.steps .who { display: block; margin-top: 10px; text-align: center; font-family: var(--font-head); font-weight: 900; font-size: 12px; letter-spacing: .17em; text-transform: uppercase; color: var(--slate); }
 
     @keyframes flow { to { stroke-dashoffset: -16; } }
     @keyframes enter { from { opacity: 0; transform: scale(.85); } to { opacity: 1; transform: none; } }
@@ -128,7 +121,7 @@
 
     // lock draws a padlock centred on x, y; up is green, down is grey.
     function lock(x, y, up) {
-      const colour = up ? "var(--founda)" : "var(--fg-dim)";
+      const colour = up ? "var(--green)" : "var(--fg-dim)";
       return `<rect x="${x - 7}" y="${y - 2}" width="14" height="11" rx="2" fill="${colour}" />
         <path d="M${x - 4.5} ${y - 2} v-4 a4.5 4.5 0 0 1 9 0 v4" fill="none" stroke="${colour}" stroke-width="1.5" />`;
     }
@@ -218,7 +211,7 @@
         ${hs.map(hospital).join("")}
         ${hs.length ? "" : `<text class="empty" x="${W / 2}" y="${H / 2}" text-anchor="middle">No hospitals configured.</text>`}`;
       const el = $("network");
-      el.setAttribute("viewBox", `0 0 ${W} ${H}`);
+      el.setAttribute("viewBox", `-2 -2 ${W + 4} ${H + 4}`); // room for the outer strokes
       el.innerHTML = svg;
       shown = next;
     }
